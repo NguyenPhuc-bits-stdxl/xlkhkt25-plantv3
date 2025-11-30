@@ -1,10 +1,3 @@
-#define LCD_CS   9
-#define LCD_DC   10
-#define LCD_SCLK 13
-#define LCD_MOSI 12
-#define LCD_RST  11
-Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
-
 void scrInit() {
   SPI.begin(LCD_SCLK, -1, LCD_MOSI, LCD_CS);
   delay(100);
@@ -17,20 +10,22 @@ void scrShowMessage(const char* msg) {
   Serial.println(msg);
 }
 
-void scrShowStatus(int vLight, float vTemp, float vHumid, int vBat) {
+void scrShowStatus() {
   tft.setCursor(0, 0);
   tft.fillScreen(ST77XX_WHITE);
   tft.setTextColor(ST77XX_BLACK);
   tft.setTextSize(1);
 
-  tft.print("Light: ");
-  tft.println(vLight);
+  tft.print("Light AO: ");
+  tft.println(ssLightAo);
+  tft.print("Light DO: ");
+  tft.println(ssLightDo);
   tft.print("Temp: ");
-  tft.println(vTemp);
+  tft.println(ssTemperature);
   tft.print("Humidity: ");
-  tft.println(vHumid);
+  tft.println(ssHumidity);
   tft.print("Battery: ");
-  tft.println(vBat);
+  tft.println(90);
 }
 
 void scrStartUp() {

@@ -5,6 +5,7 @@
 
 // --- includes ----------------
 
+#include <WiFi.h>
 #include <WiFiManager.h>         // Dependencies: main, lib_audio_recording, lib_audio_transcription, lib_openai_groq_chat, lib_wifi
 #include <WiFiClientSecure.h>    // only needed in other tabs (.ino)
 #include <Preferences.h>         // Dependencies: lib_sys
@@ -24,6 +25,8 @@ bool    DEBUG = true;
 #define DebugPrintln(x);         if(DEBUG){Serial.println(x);}  
 
 // === PRIVATE credentials =====
+// -- DEFINE YOUR OWN CREDENTIALS IN private_credentials.ino -- //
+// THIS SECTION BELOW IS DEPRECATED //
 
 const char* OPENAI_KEY =         "";
 const char* GROQ_KEY =           "";   
@@ -63,6 +66,43 @@ bool wmShouldSaveConfig = false;
 String wmSsid;
 String wmPwd;
 
+// -- SYSTEM STRINGS ---
+
+const char* systrReset = "RESET button\nis pressed!";
+const char* systrHot = "Ở đây nóng quá bạn ơi!";
+const char* systrCold = "Mình lạnh quá bạn ơi!";
+const char* systrThirst = "Bạn ơi mình khát quá!";
+const char* systrDark = "Trời tối quá bạn ơi, cho mình xin tí ánh sáng nhé!";
+
+const char* wmBroadcast = "CAY XANH LILY";
+const char* wmsPleaseConfig = "Connect to\n'CAY XANH LILY'\nto configure";
+const char* wmsSaveRequest = "Receiving data\nfrom WiFiManager...";
+const char* wmsSaveSuccess = "WiFi credentials\nare saved\nsuccessfully. Wait...";
+const char* wmsReading = "Reading WiFi\nconfiguration...";
+const char* wmsEstablished = "Connection established. Ready!";
+
+// --- SENSORS CONFIGURATION ---
+
+const int DHTPIN = 37;      
+const int DHTTYPE = DHT11;  
+DHT dht(DHTPIN, DHTTYPE);
+
+const int LDR_AO = 39;
+const int LDR_DO = 36;
+
+int ssLightAo;
+bool ssLightDo; 
+float ssHumidity;
+float ssTemperature;
+
+// --- TFT SCREEN ---
+#define LCD_CS   10
+#define LCD_DC   11
+#define LCD_SCLK 14
+#define LCD_MOSI 13
+#define LCD_RST  12
+Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
+
 // --- last not least: declaration of functions in other modules (not mandatory but ensures compiler checks correctly)
 // splitting Sketch into multiple tabs see e.g. here: https://www.youtube.com/watch?v=HtYlQXt14zU
 
@@ -82,7 +122,7 @@ void sysReadSensors();
 
 void scrInit();
 void scrShowMessage( const char* msg );
-void scrShowStatus(int vLight, float vTemp, float vHumid, int vBat);
+void scrShowStatus();
 void scrStartUp();
 
 void wmSaveConfigCallback();
@@ -354,6 +394,7 @@ void loop()
   }
   else                                         { 
      sysReadSensors();
+     //scrShowStatus();
      //scrShowMessage("REQ READY");
   } 
    

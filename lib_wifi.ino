@@ -1,9 +1,3 @@
-const char* wmBroadcast = "CAY XANH LILY";
-const char* wmsPleaseConfig = "Connect to\n'CAY XANH LILY'\nto configure";
-const char* wmsSaveRequest = "Receiving data\nfrom WiFiManager...";
-const char* wmsSaveSuccess = "WiFi credentials\nare saved\nsuccessfully. Wait...";
-const char* wmsReading = "Reading WiFi\nconfiguration...";
-
 void wmSaveConfigCallback() {
   scrShowMessage(wmsSaveRequest);
   wmShouldSaveConfig = true;
@@ -34,7 +28,8 @@ void wmConfig() {
 
 void wmConnect() {
   wmReadCreds();
-  wm.autoConnect(wmSsid.c_str(), wmPwd.c_str());
+  wm.autoConnect("LIEN", "12345678");
+  scrShowMessage(wmsEstablished);
 }
 
 void wmInit() {
