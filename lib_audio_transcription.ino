@@ -1,58 +1,10 @@
-// --- includes ----------------
-
-/* #include <WiFiClientSecure.h>  // library needed, but already included in main.ino tab */
- 
-/* #include <SD.h>                // library needed, but already included in main.ino tab */
-
-
-// --- defines & macros --------
-
-/* needed, but already defined in main.ino tab:
-#ifndef DEBUG                     // user can define favorite behaviour ('true' displays addition info)
-#  define DEBUG false             // <- define your preference here [true activates printing INFO details]  
-#  define DebugPrint(x);          if(DEBUG){Serial.print(x);}   // do not touch
-#  define DebugPrintln(x);        if(DEBUG){Serial.println(x);} // do not touch 
-#endif */
-
-
 // --- user preferences --------  
-
 #define TIMEOUT_STT         8     // max. waiting time [sec] for STT Server transcription response (after wav sent), e.g. 8 sec. 
                                   // typical response latency is much faster. TIMEOUT is primary used if server connection lost
                                   
-
-
-// ------------------------------------------------------------------------------------------------------------------------------
-// SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRAM_length, String language, const char* API_Key )
-// ------------------------------------------------------------------------------------------------------------------------------
-// - Sending pre-recorded AUDIO WAV via https POST message to ElevenLabs SpeechToText (STT) server, receiving transcription text
-// - Function supports 2 audio source locations: WAV file on SD Card (wav files) - OR - Binary data stored in RAM/PSRAM
-// - current used model: "scribe_v1", server endpoint: "api.elevenlabs.io" 
-//
-// CALL:     Call function on demand at any time, no Initializing needed (function initializes/connects/closes websocket)
-// Params:   - String audio_filename: Filename of audio file on SD Card | or empty "" if source is RAM/PSRAM buffer 
-//           - uint8_t* PSRAM:        Pointer to PSRAM buffer (including wav header) | or NULL if audio source is file on SD Card 
-//           - long PSRAM_length:     Amount of audio bytes in PSRAM | ignored if audio source is file on SD Card    
-//           - String language:       ISO 639 codes. Recommendation: keep empty ! [default] to keep ElevenLabs powerful 
-//                                    MULTI-lingual capabilities enabled (predicting language automatically, ~ 100 languages !)
-//           - const char* API_Key:   ELEVENLABS KEY, registration (free account) 
-// RETURN:   String transcription (function is waiting until server result received or TIMEOUT passed)
-//
-// Examples: Serial.println( SpeechToText_ElevenLabs( "/Audio.wav", NULL, 0,  "", "my..KEY" ));  <- transcribe SD card file
-//           String text = SpeechToText_ElevenLabs( "", PSRAM_buffer, bytes, "", "my..KEY" );    <- transcribe wav data buffer
-//           etc ... 
-//
-// Links:    - API Reference (Create Transcript):       https://elevenlabs.io/docs/api-reference/speech-to-text/convert
-//           - ElevenLabs Models (see Scribe v1):       https://elevenlabs.io/docs/models
-//           - ElevenLabs Pricing (see Speech-To-Text): https://elevenlabs.io/de/pricing#pricing-table (e.g. register 0$ free)
-
-
 String SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRAM_length, String language, const char* API_Key )
 { 
-  static WiFiClientSecure client;     // websocket handle (no global var needed)
-                                      // using static (allows to keep session open in case 'client.stop()' below removed)
-                                      // HINT: you can removed 'static' to free up HEAP (in case you .stop() anyhow always)
-                                      
+  static WiFiClientSecure client;                                        
   uint32_t t_start = millis(); 
   
   
@@ -75,17 +27,13 @@ String SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRA
                                   
   uint32_t t_connected = millis();  
         
-  // ---------- Check if AUDIO file exists, check file size (NEW: PSRAM supported)
-
   size_t audio_size;
   if ( PSRAM != NULL && PSRAM_length > 0)                
   {  audio_size = PSRAM_length; 
   }
   else
-  {  File audioFile = SD.open( audio_filename );    
-     audio_size = audioFile.size();
-     audioFile.close();
-     DebugPrintln( "> Audio File [" + audio_filename + "] found, size: " + (String) audio_size ); 
+  {  
+     DebugPrintln( "> Audio File: SD card not supported"); 
   }
 
   if (audio_size == 0)   // error handling: if nothing found at all .. then return empty string. DONE.
@@ -160,20 +108,7 @@ String SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRA
   
   if ( audio_filename != "" && !(PSRAM != NULL && PSRAM_length > 0) )
   {  
-     // Reading the AUDIO wav file, sending in CHUNKS (closing file after done)
-     // idea found here (WiFiClientSecure.h issue): https://www.esp32.com/viewtopic.php?t=4675
-  
-     File file = SD.open( audio_filename, FILE_READ );
-     const size_t bufferSize = 1024;   // best values seem anywhere between 1024 and 2048; 
-     uint8_t buffer[bufferSize];
-     size_t bytesRead;
-     while (file.available()) 
-     { bytesRead = file.read(buffer, sizeof(buffer));
-       if (bytesRead > 0) { client.write(buffer, bytesRead); }  // sending WAV AUDIO data       
-     }
-     file.close();
-     DebugPrintln( "> SD Card file '" + (String) audio_filename + "' sent to STT server" );
-     DebugPrintln( "> All bytes sent, waiting transcription");    
+     DebugPrintln( "> Sending bytes failed: SD Card functionality removed");    
   }    
   
   // ---------- PAYLOAD - END:  Sending final boundery to complete multipart/form-data
@@ -242,12 +177,6 @@ String SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRA
   // ---------- return transcription String 
   return transcription;    
 }
-
-
-
-// ------------------------------------------------------------------------------------------------------------------------------
-// JSON String Extract: Searching [element] in [input], example: element = '"text":' -> returns content 'How are you?'
-// ------------------------------------------------------------------------------------------------------------------------------
 
 String json_object( String input, String element )
 { String content = "";

@@ -1,47 +1,15 @@
-// --- includes ----------------
-
-/* #include <WiFiClientSecure.h> // library needed, but already included in main.ino tab */
-
 #define  ENABLE_DEBUG
-
-// --- defines & macros --------
-
-/* needed, but already defined in main.ino tab:
-#ifndef DEBUG                    // user can define favorite behaviour ('true' displays addition info)
-#  define DEBUG false            // <- define your preference here [true activates printing INFO details]  
-#  define DebugPrint(x);         if(DEBUG){Serial.print(x);}   // do not touch
-#  define DebugPrintln(x);       if(DEBUG){Serial.println(x);} // do not touch! 
-#endif */
 
 // --- user preferences --------  
 #define WEB_SEARCH_USER_CITY     "Đồng Nai, Vietnam" // optional (recommended): User location optimizes OpenAI 'web search'
-
 #define TIMEOUT_LLM  10          // preferred max. waiting time [sec] for LMM AI response     
 
-int gl_CURR_FRIEND = 0;          // Current active FRIEND[n], DEFAULT user on Power On. Use [default] -1 for user by RANDOM !  
-                                 // Examples: use -1 for 'surprise', or e.g. 2 if you always want to start with FRIEND[2] 
-
-#define WAKEUP_FRIENDS_ENABLED   false   // default [true] allows to 'call' any FRIEND by his names (with new System Prompt)
-                                         // [false] inactivates multi agent feature, staying with gl_CURR_FRIEND friend always                                 
-            
-
+int gl_CURR_FRIEND = 0;   
+#define WAKEUP_FRIENDS_ENABLED   false
             
 // --- global Objects ---------- 
 
-String  MESSAGES;                // MESSAGES contains complete Chat dialog, initialized with SYSTEM PROMPT from active FRIENDS[]
-                                 // .. each 'OpenAI_Groq_LLM()' call APPENDS new content (and erased on each 'friend' change)
-                                 // {"role": "user", "content": ".."},
-                                 // {"role": "assistant", "content": ".."} ..
-                                 // Hint: this String can increase to e.g. 100KB on 'long long' chat dialogs (stressing heap)
-                                 // (my workaround: waking up other friend after long chat, altern.(tbd): cutting old history)
-                                                                  
-// ------------------------------------------------------------------------------------------------------------------------------
-// Define your Chat 'person' (agent/friend) below - describe the AI personality, enter as many FRIENDS() you need         
-// Each 'person' can have several synonyms (use this to eliminate variations in earlier Speech recognition !)
-// Each 'person' can be assigned to a dedicated voice, tts parameter will be used in TextToSpeech() [main.ino] 
-// Open AI TTS voices (Aug. 2025): alloy|ash|coral|echo|fable|onyx|nova|sage|shimmer 
-// You also might change 'KALO' in SYSTEM PROMPTS to YOUR name ;)
-
+String  MESSAGES;  
 struct  Agents                   // General Structure of each Chat Bot (friend) - DO NOT TOUCH ! 
 { const char* names;             // supporting multiple names for same guy (1-N synonyms, ' ' as limiter) - always UPPER CASE !
   const char* tts_model;         // typical values: "gpt-4o-mini-tts" or fast "tts-1" (sound different, so we utilize both)
@@ -52,10 +20,7 @@ struct  Agents                   // General Structure of each Chat Bot (friend) 
   const char* prompt;            // System PROMPT (Role / Personality)
 };
 
-// Hint: Do NOT worry about this large FRIENDS[] String array below .. ESP32 stores CONST global vars always in FLASH ! ;)
-// (does not stress any HEAP, also no longer PROGMEM needed)
-
-const Agents FRIENDS[] =                                 // UPDATE HERE !: Define as many FRIENDS you want ... 
+const Agents FRIENDS[] =                           
 {  
   { "LILY",                      
     "tts-1", "alloy", "1",              
@@ -70,43 +35,6 @@ const Agents FRIENDS[] =                                 // UPDATE HERE !: Defin
 };
 
 // --- END of global Objects ---
-
-
-
-// ------------------------------------------------------------------------------------------------------------------------------
-// String  OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_WebSearch, const char* llm_groq_key )
-// ------------------------------------------------------------------------------------------------------------------------------
-// [NEW]: Versatile LLM call, supporting multiple LLM models via OPEN AI or [NEW]: Groq CLOUD server API calls
-// Supporting dozens of LLM models (OpenAI: https://platform.openai.com/docs/models | Crog: https://console.groq.com/docs/models)
-// Default setting below for CHAT LLM:   Groq Meta [llama-3.1-8b-instant]       <- very FAST, low latency, lowest costs
-// Default setting below for WEB SEARCH: Open AI [gpt-4o-mini-search-preview]   <- higher latency (due search), low costs
-// In case any other models preferred: Just update the LLM_XY in code below (no changes in syntax needed)
-// 
-// - OpenAI_Groq_LLM() 'remembers' all conversations during session on ongoing dialogs (appending last I/O to String MESSAGES)
-// - Supporting user defined SYSTEM PROMPTS (user favorite AI bot 'character role')
-// - [NEW]: Multiple Agents (I call them 'FRIENDS') supported now -> just CALL friends by their names ! (via STT/SpeechToText)
-//   (new called function 'WakeUpFriends()' handles all role-related tasks automatically (activating new friend)
-// - User can define 1-N Agents FRIENDS[n] with their 'individual characters', also TTS Voice parameter can be assigned
-//   (new public function 'get_tts_param() can be used to send role-specific tts parameter to TTS (TextToSpeech() in main.ino
-//
-// CALL:      Call function on demand at any time, no Initializing needed (function initializes/connects/closes websocket)
-// Params:    - UserRequest:    User question/request to Open AI or Groq AP LLM, return feedback as String
-//                              (inbuilt function: UserRequest '#' lists complete CHAT history and available AI bots (friends) 
-//            - llm_open_key:   User registration and Open AI API key needed, check Open AI website for more details 
-//            - flg_WebSearch:  false -> using GroqCloud CHAT LLM (Groq llama-3.1-8b-instant)
-//            - flg_WebSearch:  true  -> using OpenAI WEB SEARCH  (OpenAI gpt-4o-mini-search-preview) & WEB_SEARCH_USER_CITY
-//            - llm_groq_key:   User registration and Groq API key needed, check Groq website for more details 
-// RETURN:    LLM String response
-//
-// Examples:  String answer = OpenAI_Groq_LLM( "What means RGB?", "OA_KEY", false, "GROQ_KEY" );        <- default GROQ chat
-//            String answer = OpenAI_Groq_LLM( "Will it rain tomorrow?", "OA_KEY", true, "GROQ_KEY" );  <- OpenAI websearch chat
-//
-// = Links =
-// Open AI    - API CHAT COMPLETION: https://platform.openai.com/docs/api-reference/chat/create
-//            - Playground (testing models & system prompt): https://platform.openai.com/playground/prompts?models=gpt-4o-mini  
-//            - LLM Models & Pricing: https://platform.openai.com/docs/pricing 
-//            - Open AI Models Latency/Speed Analysis: https://artificialanalysis.ai/providers/openai (!)
-//              Pricing Aug. 2025 (I/O in $USD/1 Mio token): gpt-4.1-nano: $0.10/0.40, gpt-4o-mini-search-preview: $0.15/0.60 
 
 String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_WebSearch, const char* llm_groq_key )
 {   
@@ -324,19 +252,6 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     return ( Feedback );                           
 }
 
-// ------------------------------------------------------------------------------------------------------------------------------
-// bool WordInStringFound( String sentence, String pattern ) - a bit complex String function (OpenAI ChatCPT helped in coding :))
-// [Internal private String function, used in this lib.ino only]
-// ------------------------------------------------------------------------------------------------------------------------------
-// - Function checks if 'sentence' contains any single words which are listed in 'pattern' (pattern has 1-N space limited words)
-// - case sensitive, but ignoring all punctuations (".,;:!?\"'-()[]{}") in sentence (replacing with ' ')
-// CALL:     Call function on demand (used once in OpenAI_Groq_LLM() for waking up (initializing) any friend (calling by name)
-// Params:   String sentence (e.g. user request transcription), String pattern with a list of 1-N words (space limited)
-// RETURN:   true if 1 or more pattern (word) found, false if nothing found or empty strings
-// Examples: WordInStringFound( "Hello friend!, this is a test", "my xyz friend" ) -> true (friend matches. '!' doesn't matter)
-//           WordInStringFound( "Hello friend2, this is a test", "cde my friend" ) -> false (no pattern word found2 in sentence) 
-//           WordInStringFound( "I jump over to VEGGIE. Are you online?", "VEGGI VEGGIE WETCHI WEDGIE" ) -> true (VEGGIE found)
-
 bool WordInStringFound( String sentence, String pattern ) 
 { 
   // replacing any punctuations in sentence with ' '
@@ -354,14 +269,6 @@ bool WordInStringFound( String sentence, String pattern )
   }
   return false;
 }
-
-// ------------------------------------------------------------------------------------------------------------------------------
-// void get_tts_param( 'return N values by pointer' )
-// PUBLIC function - Intended use: allows TextToSpeech() in main.ino to get all predefined tts parameter of current FRIEND[x]
-// ------------------------------------------------------------------------------------------------------------------------------
-// Idea: Keeping whole global FRIENDS[] array 'private' for this .ino, no read/write access outside (workaraound instead .cpp/.h)
-// All values are returned via pointer (var declaration and instance have to be allocated in calling function !)
-// Params: Agent_id [0-N], 1st friend name, tts-model, tts-voice, tts-vspeed, tts-voice -instruction, welcome_hello  
 
 void get_tts_param( int* id, String* names, String* model, String* voice, String* vspeed, String* inst, String* hello )
 {  

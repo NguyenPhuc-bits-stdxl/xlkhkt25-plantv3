@@ -1,53 +1,17 @@
-
-// ------------------------------------------------------------------------------------------------------------------------------
-// ----------------            KALO Library - RECORDING audio (variable sample/bit rate, gain booster)           ----------------
-// ----------------              and storing as .wav file (with header) on SD Card or [NEW] in PSRAM             ----------------   
-// ----------------   [define preferred AUDIO RECORD location via #define RECORD_SPSRAM / RECORD_SDCARD below]   ----------------
-// ----------------                               Latest Update: Aug. 11, 2025                                   ----------------
-// ----------------                                     Coded by KALO                                            ----------------
-// ----------------                                                                                              ---------------- 
-// ----------------                     Used pins SD Card: VSPI Default pins 5,18,19,23                          ----------------
-// ----------------         Alternative to SD Card: ESP32 with PSRAM (e.g. ESP32 Wrover 2/4/8 MB PSRAM)          ----------------
-// ----------------                 Used pins I2S Microphone INMP441: WS 22, SCK 33, SD 35                       ----------------
-// ----------------                      Using latest ESP 3.x library (with I2S_std.h)                           ----------------
-// ----------------                                                                                              ----------------
-// ----------------             Functions: I2S_Recording_Init(), Recording_Loop(), Recording_Stop(..)            ----------------
-// ------------------------------------------------------------------------------------------------------------------------------
-
-
 // --- includes ----------------
-
 #include "driver/i2s_std.h"       // important: older legacy #include <driver/i2s.h> no longer supported 
-/* #include <SD.h>                // library needed, but already included in main.ino tab */
-
-
-// --- defines & macros --------
-
-/* needed, but already defined in main.ino tab:
-#ifndef DEBUG                     // user can define favorite behaviour ('true' displays addition info)
-#  define DEBUG false             // <- define your preference here [true activates printing INFO details]  
-#  define DebugPrint(x);          if(DEBUG){Serial.print(x);}   // do not touch
-#  define DebugPrintln(x);        if(DEBUG){Serial.println(x);} // do not touch 
-#endif */
-
 
 // === recording settings ====== 
-
 #define RECORD_PSRAM      true   // true: store Audio Recording .wav in PSRAM (ESP32 with PSRAM needed, e.g. ESP32 Wrover)
-#define RECORD_SDCARD     false  // true: store Audio Recording .wav on SD card (prerequisite: SD card reader, VSPI pins)
-                                 // at least one of both has to be true (or both if needed)
                                   
-// --- PCB: ElatoAI ------------ // Elato AI using different pins, circuit here: https://github.com/akdeb/ElatoAI
+// --- PCB: ESP32-S3 Dev ------------
 #define I2S_LR            LOW    // LOW because L/R pin of INMP441 is connected to GND (default LEFT channel)                                 
 #define I2S_WS            4            
 #define I2S_SD            6        
 #define I2S_SCK           5       
                         
                                   
-// --- audio settings ----------
-
-#define AUDIO_FILE        "/Audio.wav"   // mandatory if RECORD_SDCARD is true: filename for the AUDIO recording                                  
-
+// --- audio settings ----------                         
 #define SAMPLE_RATE       16000  // typical values: 8000 .. 44100, use e.g 8K (and 8 bit mono) for smallest .wav files  
                                  // hint: best quality with 16000 or 24000 (above 24000: random dropouts and distortions)
                                  // recommendation in case the STT service produces lot of wrong words: try 16000 
@@ -59,19 +23,7 @@
 #define GAIN_BOOSTER_I2S  32     // original I2S streams is VERY silent, so we added an optional GAIN booster for INMP441
                                  // multiplier, values: 1-64 (32 seems best value for INMP441)
                                  // 64: high background noise but still working well for STT on quiet human conversations
-        
-// Links of interest:
-// SD Card Arduino library info: https://www.arduino.cc/reference/en/libraries/sd/
-// SD Card ESP details: https://randomnerdtutorials.com/esp32-microsd-card-arduino/
-// Dronebot I2S workshop: https://dronebotworkshop.com/esp32-i2s/ (using old I2S.h)
-// Link WAV header: http://soundfile.sapp.org/doc/WaveFormat/
-// I2S setting code snippets: https://github.com/espressif/esp-adf/issues/1047 
-// Using tabs to organize code with the Arduino IDE: https://www.youtube.com/watch?v=HtYlQXt14zU 
-
-// Code below is based on Espressif API I2S Reference Doc (Latest Master):
-// link: https://docs.espressif.com/projects/esp-idf/en/latest/esp32/api-reference/peripherals/i2s.html#introduction
-
-
+  
 // --- global vars -------------
 
 uint8_t* PSRAM_BUFFER;            // global array for RECORDED .wav (50% of PSRAM via ps_malloc() in I2S_Recording_Init()
@@ -92,21 +44,6 @@ i2s_std_config_t  std_cfg =
   // Datasheet INMP441: Microphone uses PHILIPS format (bc. Data signal has a 1-bit shift AND signal WS is NOT pulse lasting)
   
   .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG( I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO ), 
-  
-  /* // info: the MACRO above creates this structure on an ESP-32:
-  .slot_cfg =   // hint: always using _16BIT because I2S uses 16 bit slots (even in case I2S_DATA_BIT_WIDTH_8BIT used !)
-  { .data_bit_width = I2S_DATA_BIT_WIDTH_16BIT,  // not I2S_DATA_BIT_WIDTH_8BIT or (i2s_data_bit_width_t) BITS_PER_SAMPLE  
-    .slot_bit_width = I2S_SLOT_BIT_WIDTH_AUTO, 
-    .slot_mode = I2S_SLOT_MODE_MONO,             // do NOT use STEREO on INMP441 ! (would produce a wrong I2S_STD_SLOT_BOTH)
-    .slot_mask = I2S_STD_SLOT_LEFT,              // <- this is WRONG in case RIGHT channel used (if L/R pin connected to Vcc)
-                                                 // .. so we update in I2S_Recording_Init() bc. MACRO does not support this
-    .ws_width =  I2S_DATA_BIT_WIDTH_16BIT,           
-    .ws_pol = false, 
-    .bit_shift = true,    // important ! (that's the reason why we need the PHILIPS macro, not the MSB macro) !
-    .msb_right = false,   // because WIDTH_16BIT used
-    // Update: ESP32-S3 (!) does NOT have a final '.msb_right' ... instead it has 3 other elements at eof structure: 
-    // .left_align = true, .big_endian = false, .bit_order_lsb = false,        
-  }, */
   
   .gpio_cfg =   
   { .mclk = I2S_GPIO_UNUSED,
@@ -147,19 +84,6 @@ struct WAV_HEADER
 bool flg_is_recording = false;         // only internally used
 
 bool flg_I2S_initialized = false;      // to avoid any runtime errors in case user forgot to initialize
- 
-
-
-// ------------------------------------------------------------------------------------------------------------------------------
-// I2S_Recording_Init()
-// ------------------------------------------------------------------------------------------------------------------------------
-// - Initializes upcoming I2S Recording via I2S microphone, setting I2S ports (via i2s_std.h) and pin assignments 
-// - Configures I2S ports and global vars, checking PSRAM and SD card availability, printing HW details in DEBUG mode.
-// - Function checks where the recorded AUDIO data will be stored (via global #defines RECORD_PSRAM + RECORD_SDCARD)
-// - NEW: Function updates I2S structure 'std_cfg.slot_cfg.slot_mask': mandatory in case RIGHT channel used (I2S_LR on Vcc) 
-// CALL:   Function has to be called once (e.g. in setup()) 
-// Params: NONE
-// RETURN: true: Initializing successful | false: (and ERROR in Serial Monitor) if failed
 
 bool I2S_Recording_Init() 
 {  
@@ -174,12 +98,6 @@ bool I2S_Recording_Init()
   i2s_channel_init_std_mode(rx_handle, &std_cfg);   // Initialize the channel
   i2s_channel_enable(rx_handle);                    // Before reading data, start the RX channel first
 
-  // ------ Check hardware prerequisites (PSRAM & SD CARD Reader) & user preferences
-  // Printing ESP32 details / links of interest: 
-  // - How To Use PSRAM: https://thingpulse.com/esp32-how-to-use-psram/
-  // - Using the PSRAM: https://www.upesy.com/blogs/tutorials/get-more-ram-on-esp32-with-psram
-  // - SPIFFS/LittleFS: https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/file-system-considerations.html
-    
   DebugPrintln( "> I2S_Recording_Init - Initializing Recording Setup:"     );
   DebugPrintln( "- Sketch Size: " + (String) ESP.getSketchSize()           );
   DebugPrintln( "- Total Heap:  " + (String) ESP.getHeapSize()             );
@@ -210,38 +128,10 @@ bool I2S_Recording_Init()
     }     
   }
   
-  if (RECORD_SDCARD)
-  { // check if SD card reader and SD card found 
-    if (SD.begin()) 
-    {  DebugPrintln("> SD CARD detected, used for AUDIO recording\n");       
-    }
-    else
-    {  Serial.println("* ERROR - SD Card initialization failed!. Stopped."); 
-       while(true);  // END (waiting forever) 
-    }     
-  }  
-
-  /* Not used: 
-  i2s_channel_disable(rx_handle);                   // Stopping the channel before deleting it 
-  i2s_del_channel(rx_handle);                       // delete handle to release the channel resources */
-  
   flg_I2S_initialized = true;                       // all is initialized, checked in procedure Recording_Loop()
  
   return flg_I2S_initialized;  
 }
-
-
-
-// ------------------------------------------------------------------------------------------------------------------------------
-// Recording_Loop()
-// ------------------------------------------------------------------------------------------------------------------------------
-// - Function reads and cleans the I2S input stream continuously, appending received DATA to PSRAM buffer or file on SD Card
-// - global #defines (#defines RECORD_PSRAM, RECORD_SDCARD) define where the I2S data will be stored (appended)
-// - on 1st call: Audio WAV header will be generated and Recoding starting in PSRAM a/o SDCARD
-// CALL:   - Call function 1st time to START new recording (typically if user is pressing a button)
-//         - then call continuously in main loop() to ensure that I2S stream buffer won't overflow during recording
-// Params: NONE
-// RETURN: true: Recording started successfully | false: (and ERROR in Serial Monitor) if failed
 
 bool Recording_Loop() 
 {
@@ -261,15 +151,7 @@ bool Recording_Loop()
        } 
        DebugPrintln("> WAV Header in PSRAM generated, Audio Recording started ... ");
     }
-    if (RECORD_SDCARD)     
-    {  if (SD.exists(AUDIO_FILE)) 
-       {  SD.remove(AUDIO_FILE);  // because we start with a net new file
-       }     
-       File audio_file = SD.open(AUDIO_FILE, FILE_WRITE);
-       audio_file.write((uint8_t *) &myWAV_Header, 44);
-       audio_file.close();        
-       DebugPrintln("> WAV Header stored on SD card, Audio Recording started ... ");
-    }
+    
     // now proceed below (flg_is_recording is true) ....
   }
   
@@ -328,36 +210,9 @@ bool Recording_Loop()
           }  else { Serial.println("* WARNING - PSRAM full, Recording stopped."); }
        }  
     }
-    if (RECORD_SDCARD)
-    {  // Save audio data to SD card (appending chunk array to file end)
-       File audio_file = SD.open(AUDIO_FILE, FILE_APPEND);
-       if (BITS_PER_SAMPLE == 16) // 16 bit default: appending original I2S chunks (e.g. 1014 values, 2048 bytes)
-       {  audio_file.write((uint8_t*)audio_buffer, values_recorded * 2);   // for each value 2 bytes needed
-       }        
-       if (BITS_PER_SAMPLE == 8)  // 8bit mode: appending calculated 1014 values instead (1024 bytes, 2048/2) 
-       {  audio_file.write((uint8_t*)audio_buffer_8bit, values_recorded);
-       }  
-       audio_file.close();                 
-    }      
   }  
   return true;
 }
-
-
-
-// ------------------------------------------------------------------------------------------------------------------------------
-// Recording_Stop( String* audio_filename, uint8_t** buff_start, long* audiolength_bytes, float* audiolength_sec ) 
-// ------------------------------------------------------------------------------------------------------------------------------
-// - Function STOPs any ongoing recording, finalizing WAV header and returns recording DETAILS via pointer
-// - Function has no action if no ongoing recording detected
-// CALL:   Call function once on demand when ongoing recording should be stopped and wav stored (e.g. on REC button release)
-// Params: Multiple values are returned via pointer (var declaration and instance have to be allocated in calling function!)
-//         - String* audio_filename:  Filename of created file on SD Card,  only if RECORD_SDCARD true, "" on RECORD_PSRAM 
-//         - uint8_t** buff_start:    Pointer to PSRAM start (ptr to ptr ;) only if RECORD_PSRAM true, NULL on RECORD_SDCARD 
-//         - long* audiolength_bytes: Amount of recorded bytes in PSRAM,    only if RECORD_PSRAM true, 0 on RECORD_SDCARD  
-//         - float* audiolength_sec:  Duration of recorded Audio in xx.xx seconds (RECORD_SDCARD and RECORD_PSRAM)
-// RETURN: true: Recording successfully stopped, WAV header finalized and Audio DATA are ready for further processing 
-//         (true ONCE only when done ! .. this allows to keep function without further actions in any loop)
 
 bool Recording_Stop( String* audio_filename, uint8_t** buff_start, long* audiolength_bytes, float* audiolength_sec ) 
 {
@@ -402,38 +257,6 @@ bool Recording_Stop( String* audio_filename, uint8_t** buff_start, long* audiole
 
        DebugPrintln("> ... Done. Audio Recording into PSRAM finished.");
        DebugPrintln("> Bytes recorded: " + (String) *audiolength_bytes + ", audio length [sec]: " + (String) *audiolength_sec );
-        
-       /* // Optional for debugging: Writing the PSRAM content to a 2nd file "AudioPSRAM.wav", printing first chunks
-       File control_file = SD.open("/AudioPSRAM.wav", FILE_WRITE);
-       control_file.write( PSRAM_BUFFER, PSRAM_BUFFER_counter );
-       control_file.close(); 
-       Serial.println( "\n# DEBUG: PSRAM content mirrored on SD card [AudioPSRAM.wav]" );
-       Serial.println(   "# DEBUG: PSRAM extract [220 bytes, 44 byte wav header in first 2 rows]:\n ");
-       for (int i=0; i<220; i++) 
-       { Serial.print( PSRAM_BUFFER[i], HEX); Serial.print( "\t"); 
-         if ( (i+1)%22 == 0) {Serial.println();}
-       } Serial.println(); */
-    }
-    
-    if (RECORD_SDCARD)
-    {  
-       File audio_file = SD.open(AUDIO_FILE, "r+");   // Do NOT use 'FILE_WRITE' we need a 'r+' !
-       /* Blog info: https://github.com/espressif/arduino-esp32/issues/4028, 
-       // Reference: https://cplusplus.com/reference/cstdio/fopen/ */
-       
-       long filesize = audio_file.size();
-       /* bug fix: earlier version was wrrong: .flength = filesize; .dlength = (filesize-8) */
-       audio_file.seek(0); myWAV_Header.flength = (filesize-8);  myWAV_Header.dlength = (filesize-44); 
-       audio_file.write((uint8_t *) &myWAV_Header, 44);
-       audio_file.close(); 
-
-       // return updated values via REFERENCE (pointer):
-       *audio_filename    = AUDIO_FILE;
-       *audiolength_bytes = filesize;
-       *audiolength_sec   = (float) (filesize-44) / (SAMPLE_RATE * BITS_PER_SAMPLE/8);   
-
-       DebugPrintln("> ... Done. Audio Recording finished, stored as '" + (String) AUDIO_FILE + "' on SD Card.");
-       DebugPrintln("> Bytes recorded: " + (String) *audiolength_bytes + ", audio length [sec]: " + (String) *audiolength_sec ); 
     }
     
     // Record is done (stored either in PSRAM or on SD card)
