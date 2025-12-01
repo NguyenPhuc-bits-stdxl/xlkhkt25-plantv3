@@ -43,9 +43,9 @@ int gl_VOL_STEPS[] = {0,3,5,7,9,11,13,15,17,19,21};
 #define pin_LED_RED     9        // R-G-B pins (Examples: KALO PCB 15-21-4,  KALO Proto 15-2-0, TECHIESMS 15-2-4)  
 #define pin_LED_GREEN   8        // .. rule in code below: LOW switches led color ON 
 #define pin_LED_BLUE    13  
-#define pin_I2S_DOUT    7        // I2S_DOUT + I2S_LRC + I2S_BCLK are the I2S Audio OUT pins (e.g. for I2S Amplifier MAX98357) 
-#define pin_I2S_LRC     16       // (Hint 1: I2S INPUT pins via Microphone INMP441: see header in 'lib_audio_recording.ino')
-#define pin_I2S_BCLK    15       // (Hint 2: SD card pins NOT defined at all (always using VSPI Default pins 5,18,19,23)  
+#define pin_I2S_DOUT    17        // I2S_DOUT + I2S_LRC + I2S_BCLK are the I2S Audio OUT pins (e.g. for I2S Amplifier MAX98357) 
+#define pin_I2S_LRC     4       // (Hint 1: I2S INPUT pins via Microphone INMP441: see header in 'lib_audio_recording.ino')
+#define pin_I2S_BCLK    5       // (Hint 2: SD card pins NOT defined at all (always using VSPI Default pins 5,18,19,23)  
 #define pin_TOUCH       NO_PIN   // # KALO mod # - self soldered RECORD TOUCH (free: ESP32 12,14,32 / ESP32-S3: 3,12,14) 
 #define NO_PIN          -1       // 'not connected' value for optional controls: RECORD_BTN | TOUCH | VOL_POTI | VOL_BTN 
 #define pin_VOL_POTI    NO_PIN   // no analogue wheel POTI available, using VOL_BTN for audio volume control 
@@ -133,15 +133,17 @@ void wmConnect();
 void wmInit();
 
 void sysFetchCreds();
+
 // ******************************************************************************************************************************
 
 void setup() 
 {   
   // Initialize serial communication
   Serial.begin(115200); 
-  Serial.setTimeout(100);    // 10 times faster reaction after CR entered (default is 1000ms)
 
   scrShowMessage("SERIAL INITIALIZED");
+  scrShowMessage("INITIALIZING SYSTEM COMPONENTS (WF + SCR + SENSORS)...");
+  sysInit();
 
   // Digital INPUT pin assignments (not needed for analogue pin_VOL_POTI & pin_TOUCH)
   // Detail: Some ESP32 pins do NOT support INPUT_PULLUP (e.g. pins 34-39), external resistor still needed
@@ -164,9 +166,6 @@ void setup()
   Serial.println( "> Key word [RADIO | DAILY NEWS | TAGESSCHAU] inside request: start audio url streaming" );  
   Serial.println( "========================================================================================\n"); 
   
-  scrShowMessage("INITIALIZING SYSTEM COMPONENTS (WF + SCR + SENSORS)...");
-  sysInit();
-
   scrShowMessage("INITIALIZATION COMPLETED");
 }
 
@@ -278,16 +277,6 @@ void loop()
      audio_play.connecttohost( "https://liveradio.swr.de/sw282p3/swr3/play.mp3" ); 
      UserRequest = "";  // do NOT start LLM
   } 
-
-  // 2. keyword 'DAILY NEWS' or German 'TAGESSCHAU' inside request-> Playing German TV News: Tagesschau24
-  // Use case example (Recording request): "Please stream daily news for me!" -> Streaming launched
-  
-  if (cmd.indexOf("DAILY NEWS") >=0 || cmd.indexOf("TAGESSCHAU") >=0 ) 
-  {  scrShowMessage( "< Streaming German Daily News TV: Tagesschau24 >" );   
-     // HINT !: the streaming can fail on some ESP32 without PSRAM (AUDIO.H issue!), in this case: deactivate/remove next line:
-     audio_play.connecttohost( "https://icecast.tagesschau.de/ndr/tagesschau24/live/mp3/128/stream.mp3"  ); 
-     UserRequest = "";  // do NOT start LLM
-  }
  
   // ------ USER REQUEST found -> Call OpenAI_Groq_LLM() ------------------------------------------------------------------------
   // #NEW: Update: Utilizing new 'real-time' web search feature in case user request contains the keyword 'GOOGLE' 
@@ -297,7 +286,7 @@ void loop()
   if (UserRequest != "" ) 
   { 
     // [bugfix/new]: ensure that all TTS websockets are closed prior open LLM websockets (otherwise LLM connection fails)
-    audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP) 
+    //audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP) 
     
     // CASE 1: launch Open AI WEB SEARCH feature if user request includes the keyword 'Google'
     // supporting User requests like 'Will it rain tomorrow in my region?, please ask Google'
@@ -387,13 +376,13 @@ void loop()
   delay(100);
 
   if (flg_RECORD_BTN==LOW || flg_RECORD_TOUCH) { 
-    scrShowMessage("LISTENING...");
+    //scrShowMessage("LISTENING...");
   } 
   else if (audio_play.isRunning())             {
      //scrShowMessage("SPEAKING...");
   }
   else                                         { 
-     sysReadSensors();
+     //sysReadSensors();
      //scrShowStatus();
      //scrShowMessage("REQ READY");
   } 

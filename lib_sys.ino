@@ -1,12 +1,13 @@
 void sysInit() {
-  void sysFetchCreds();
+  sysFetchCreds();
 
-  pinMode(DHTPIN, INPUT_PULLUP);
-  pinMode(LDR_DO, INPUT);
+  // Sensors
+  //pinMode(DHTPIN, INPUT_PULLUP);
+  //pinMode(LDR_DO, INPUT);
 
-  // Preferences, WiFiManager
+  // Preferences, Sensors, WiFiManager
   prefs.begin("config", false);
-  dht.begin();
+  //dht.begin();
   wmInit();
   wmConnect();
   //scrInit();   // under construction

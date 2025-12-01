@@ -16,7 +16,7 @@
                                  // hint: best quality with 16000 or 24000 (above 24000: random dropouts and distortions)
                                  // recommendation in case the STT service produces lot of wrong words: try 16000 
 
-#define BITS_PER_SAMPLE   8      // 16 bit and 8bit supported (24 or 32 bits not supported)
+#define BITS_PER_SAMPLE   16     // 16 bit and 8bit supported (24 or 32 bits not supported)
                                  // hint: 8bit is less critical for STT services than a low 8kHz sample rate
                                  // for fastest STT: combine 8kHz and 8 bit. 
 
