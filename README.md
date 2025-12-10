@@ -9,7 +9,9 @@ Google Docs documentation [here](https://docs.google.com/document/d/1plYU-8LHdzI
 - ESP32 boards by Adafruit version 3.x
 - Audio by schreibfaul1
 - WiFiManager by tzapu
-- TFT_eSPI by Bodmer
+- TFT_eSPI by Bodmer (deprecated)
+- Adafruit ST7735 library
+- u8g2 for AdafruitGFX (not Adafruit)
 - Adafruit GFX/SPI/GLCD fonts libraries
 - Adafruit Unified Sensor (by Adafruit)
 - DHT kxn (by Adafruit)
