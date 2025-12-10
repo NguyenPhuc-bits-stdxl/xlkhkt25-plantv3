@@ -6,11 +6,10 @@
                                   
 // --- PCB: ESP32-S3 Dev ------------
 #define I2S_LR            LOW    // LOW because L/R pin of INMP441 is connected to GND (default LEFT channel)                                 
-#define I2S_WS            4            
-#define I2S_SD            6        
-#define I2S_SCK           5       
-                        
-                                  
+#define I2S_WS            17            
+#define I2S_SD            15        
+#define I2S_SCK           18          
+                                                    
 // --- audio settings ----------                         
 #define SAMPLE_RATE       16000  // typical values: 8000 .. 44100, use e.g 8K (and 8 bit mono) for smallest .wav files  
                                  // hint: best quality with 16000 or 24000 (above 24000: random dropouts and distortions)
@@ -20,7 +19,7 @@
                                  // hint: 8bit is less critical for STT services than a low 8kHz sample rate
                                  // for fastest STT: combine 8kHz and 8 bit. 
 
-#define GAIN_BOOSTER_I2S  32     // original I2S streams is VERY silent, so we added an optional GAIN booster for INMP441
+#define GAIN_BOOSTER_I2S  6     // original I2S streams is VERY silent, so we added an optional GAIN booster for INMP441
                                  // multiplier, values: 1-64 (32 seems best value for INMP441)
                                  // 64: high background noise but still working well for STT on quiet human conversations
   
@@ -61,7 +60,6 @@ i2s_std_config_t  std_cfg =
 
 // [re_handle]: global handle to the RX channel with channel configuration [std_cfg]
 i2s_chan_handle_t  rx_handle;
-
 
 // [myWAV_Header]: selfmade WAV Header:
 struct WAV_HEADER 
@@ -263,4 +261,5 @@ bool Recording_Stop( String* audio_filename, uint8_t** buff_start, long* audiole
     flg_is_recording = false;  // important: this is done only here (any next Recording_Stop() calls have no action)
     return true;               // means: telling the main loop that new record is available now 
   }    
+  return true;
 }

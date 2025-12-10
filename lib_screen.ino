@@ -18,8 +18,6 @@ void scrShowStatus() {
 
   tft.print("Light AO: ");
   tft.println(ssLightAo);
-  tft.print("Light DO: ");
-  tft.println(ssLightDo);
   tft.print("Temp: ");
   tft.println(ssTemperature);
   tft.print("Humidity: ");
@@ -35,3 +33,5 @@ void scrStartUp() {
   tft.setTextSize(2);
   tft.print("LILY");
 }
+
+void scrShow
