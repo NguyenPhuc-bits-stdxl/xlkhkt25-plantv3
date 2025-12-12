@@ -1,10 +1,9 @@
-// --- user preferences --------  
 #define TIMEOUT_STT         8     // max. waiting time [sec] for STT Server transcription response (after wav sent), e.g. 8 sec. 
                                   // typical response latency is much faster. TIMEOUT is primary used if server connection lost
-                                  
+           
 String SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRAM_length, String language, const char* API_Key )
 { 
-  static WiFiClientSecure client;                                        
+  static WiFiClientSecure client;     
   uint32_t t_start = millis(); 
   
   
@@ -27,13 +26,11 @@ String SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRA
                                   
   uint32_t t_connected = millis();  
         
+  // ---------- Check if AUDIO file exists, check file size (NEW: PSRAM supported)
+
   size_t audio_size;
   if ( PSRAM != NULL && PSRAM_length > 0)                
   {  audio_size = PSRAM_length; 
-  }
-  else
-  {  
-     DebugPrintln( "> Audio File: SD card not supported"); 
   }
 
   if (audio_size == 0)   // error handling: if nothing found at all .. then return empty string. DONE.
@@ -103,14 +100,7 @@ String SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRA
      }
      DebugPrintln( "> All WAV data in PSRAM sent [" + (String) PSRAM_length + " bytes], waiting transcription" );    
   }
- 
-  // ---------- Option 2: Sending WAV from SD CARD (only if Option 1 not launched)
-  
-  if ( audio_filename != "" && !(PSRAM != NULL && PSRAM_length > 0) )
-  {  
-     DebugPrintln( "> Sending bytes failed: SD Card functionality removed");    
-  }    
-  
+   
   // ---------- PAYLOAD - END:  Sending final boundery to complete multipart/form-data
   client.print( payload_end );  
 
@@ -177,6 +167,10 @@ String SpeechToText_ElevenLabs( String audio_filename, uint8_t* PSRAM, long PSRA
   // ---------- return transcription String 
   return transcription;    
 }
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// JSON String Extract: Searching [element] in [input], example: element = '"text":' -> returns content 'How are you?'
+// ------------------------------------------------------------------------------------------------------------------------------
 
 String json_object( String input, String element )
 { String content = "";

@@ -1,21 +1,35 @@
 void sysInit() {
   sysFetchCreds();
+  Serial.println("SYS Creds fetched");
 
   // Sensors
   pinMode(DHTPIN, INPUT_PULLUP);
-
-  // Preferences, Sensors, WiFiManager
-  prefs.begin("config", false);
   dht.begin();
-  wmInit();
-  wmConnect();
-  scrInit();     
-  scrStartUp();
+  Serial.println("SYS DHT initialized");
 
+  // TFT
+  scrInit();     
+  scrStartUp();  
+  delay(1000);
+  Serial.println("SYS TFT initialized");
+
+  // Prefs
+  prefs.begin("config", false);
+  Serial.println("SYS Prefs initialized");
+
+  // WiFiManager
+  wmInit();
+  Serial.println("SYS WF initialized");
+
+  // RESET check
   if (sysIsResetPressed()) {
-    delay(1000);
     sysReset();
+    delay(1000);
   }
+
+  // Connect to WiFi
+  wmConnect();
+  Serial.println("SYS WF connected");
 }
 
 void sysReset() {
@@ -49,7 +63,7 @@ String sysGetSensorsString() {
     "Bạn là một cây xanh đang trò chuyện với một người bạn thân."
     " Nếu bạn cảm thấy khó chịu, bạn có thể nói với họ khi các chỉ số này không ổn."
     " Nhiệt độ: %d°C\nĐộ ẩm: %d%%\nÁnh sáng (theo thang từ 0-4096, số càng lớn nghĩa là càng tối): %d \n Lời nói đến từ người bạn thân: \n",
-    ssTemperature, ssHumidity, ssLightAo
+    (int)ssTemperature, (int)ssHumidity, ssLightAo
   );
   return String(buf);
 }

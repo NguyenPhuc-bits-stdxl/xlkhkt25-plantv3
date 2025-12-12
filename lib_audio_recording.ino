@@ -1,35 +1,20 @@
-// --- includes ----------------
-#include "driver/i2s_std.h"       // important: older legacy #include <driver/i2s.h> no longer supported 
 
-// === recording settings ====== 
-#define RECORD_PSRAM      true   // true: store Audio Recording .wav in PSRAM (ESP32 with PSRAM needed, e.g. ESP32 Wrover)
-                                  
-// --- PCB: ESP32-S3 Dev ------------
+#define RECORD_PSRAM      true   
+#define RECORD_SDCARD     false 
+
 #define I2S_LR            LOW    // LOW because L/R pin of INMP441 is connected to GND (default LEFT channel)                                 
 #define I2S_WS            17            
 #define I2S_SD            15        
 #define I2S_SCK           18          
-                                                    
-// --- audio settings ----------                         
-#define SAMPLE_RATE       16000  // typical values: 8000 .. 44100, use e.g 8K (and 8 bit mono) for smallest .wav files  
-                                 // hint: best quality with 16000 or 24000 (above 24000: random dropouts and distortions)
-                                 // recommendation in case the STT service produces lot of wrong words: try 16000 
-
-#define BITS_PER_SAMPLE   16     // 16 bit and 8bit supported (24 or 32 bits not supported)
-                                 // hint: 8bit is less critical for STT services than a low 8kHz sample rate
-                                 // for fastest STT: combine 8kHz and 8 bit. 
-
-#define GAIN_BOOSTER_I2S  6     // original I2S streams is VERY silent, so we added an optional GAIN booster for INMP441
-                                 // multiplier, values: 1-64 (32 seems best value for INMP441)
-                                 // 64: high background noise but still working well for STT on quiet human conversations
-  
-// --- global vars -------------
+                                                   
+#define SAMPLE_RATE       16000 
+#define BITS_PER_SAMPLE   16   
+#define GAIN_BOOSTER_I2S  6    
 
 uint8_t* PSRAM_BUFFER;            // global array for RECORDED .wav (50% of PSRAM via ps_malloc() in I2S_Recording_Init()
                                   // (using 50% only to allow other functions using PSRAM too, e.g. AUDIO.H openai_speech() 
 size_t PSRAM_BUFFER_max_usage;    // size of used buffer (50% of PSRAM)
 size_t PSRAM_BUFFER_counter = 0;  // current pointer offset position to last recorded byte
-
 
 // [std_cfg]: KALO I2S_std configuration for I2S Input device (Microphone INMP441), Details see esp32-core file 'i2s_std.h' 
 
@@ -39,11 +24,7 @@ i2s_std_config_t  std_cfg =
     .clk_src = I2S_CLK_SRC_DEFAULT,
     .mclk_multiple = I2S_MCLK_MULTIPLE_256,
   },
-  // IMPORTANT (NEW): for .slot_cfg we use MACRO in 'i2s_std.h' (to support all ESP32 variants, ESP32-S3 supported too)
-  // Datasheet INMP441: Microphone uses PHILIPS format (bc. Data signal has a 1-bit shift AND signal WS is NOT pulse lasting)
-  
   .slot_cfg = I2S_STD_PHILIPS_SLOT_DEFAULT_CONFIG( I2S_DATA_BIT_WIDTH_16BIT, I2S_SLOT_MODE_MONO ), 
-  
   .gpio_cfg =   
   { .mclk = I2S_GPIO_UNUSED,
     .bclk = (gpio_num_t) I2S_SCK,
@@ -78,11 +59,9 @@ struct WAV_HEADER
   long  dlength = 0;                                        /* data length (filelength - 44) [bug fix]  <= calc at end */
 } myWAV_Header;
 
-
 bool flg_is_recording = false;         // only internally used
-
 bool flg_I2S_initialized = false;      // to avoid any runtime errors in case user forgot to initialize
-
+ 
 bool I2S_Recording_Init() 
 {  
   // NEW: Updating I2S structure to the correct channel (LEFT and RIGHT supported)
@@ -96,6 +75,12 @@ bool I2S_Recording_Init()
   i2s_channel_init_std_mode(rx_handle, &std_cfg);   // Initialize the channel
   i2s_channel_enable(rx_handle);                    // Before reading data, start the RX channel first
 
+  // ------ Check hardware prerequisites (PSRAM & SD CARD Reader) & user preferences
+  // Printing ESP32 details / links of interest: 
+  // - How To Use PSRAM: https://thingpulse.com/esp32-how-to-use-psram/
+  // - Using the PSRAM: https://www.upesy.com/blogs/tutorials/get-more-ram-on-esp32-with-psram
+  // - SPIFFS/LittleFS: https://docs.espressif.com/projects/esp-idf/en/stable/esp32s3/api-guides/file-system-considerations.html
+    
   DebugPrintln( "> I2S_Recording_Init - Initializing Recording Setup:"     );
   DebugPrintln( "- Sketch Size: " + (String) ESP.getSketchSize()           );
   DebugPrintln( "- Total Heap:  " + (String) ESP.getHeapSize()             );
@@ -127,7 +112,6 @@ bool I2S_Recording_Init()
   }
   
   flg_I2S_initialized = true;                       // all is initialized, checked in procedure Recording_Loop()
- 
   return flg_I2S_initialized;  
 }
 
@@ -149,7 +133,6 @@ bool Recording_Loop()
        } 
        DebugPrintln("> WAV Header in PSRAM generated, Audio Recording started ... ");
     }
-    
     // now proceed below (flg_is_recording is true) ....
   }
   
@@ -207,7 +190,7 @@ bool Recording_Loop()
              PSRAM_BUFFER_counter += values_recorded;    
           }  else { Serial.println("* WARNING - PSRAM full, Recording stopped."); }
        }  
-    }
+    }     
   }  
   return true;
 }

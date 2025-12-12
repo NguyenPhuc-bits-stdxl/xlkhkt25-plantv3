@@ -1,109 +1,86 @@
-// -- DEFINE YOUR OWN CREDENTIALS IN private_credentials.ino --
+#pragma region Libraries Macros
 
-#pragma region DECLARATION
-
-#define VERSION "\n== KALO_ESP32_Voice_Chat_AI_Friends (last update: Sept. 22, 2025) ======================\n"
-#define VERSION_DATE "20250922"
-
-// --- includes ----------------
-
+#include "driver/i2s_std.h"  
 #include <WiFi.h>
 #include <WiFiManager.h>       // Dependencies: main, lib_audio_recording, lib_audio_transcription, lib_openai_groq_chat, lib_wifi
-#include <WiFiClientSecure.h>  // only needed in other tabs (.ino)
-#include <Preferences.h>       // Dependencies: lib_sys
+#include <WiFiClientSecure.h>  // Dependencies: *
+#include <Preferences.h>       // Dependencies: lib_sys, lib_wifi
 #include <DHT.h>               // Dependencies: lib_sys
 
 // Screen libraries
 #include <Adafruit_ST7735.h>
 #include <U8g2_for_Adafruit_GFX.h>
 
-#include <Audio.h>  // @Schreibfaul1 library, used for PLAYING Audio (via I2S Amplifier) -> mandatory for TTS only
-                    // [not needed for: Audio Recording - Audio STT Transcription - AI LLM Chat]
+// Audio libraries (for playback)
+#include <Audio.h>
 
-// --- defines & macros -------- // DEBUG Toggle: 'true' enables, 'false' disables printing additional details in Serial Monitor
-bool DEBUG = true;
-#define DebugPrint(x) \
-  ; \
-  if (DEBUG) { Serial.print(x); }
-#define DebugPrintln(x) \
-  ; \
-  if (DEBUG) { Serial.println(x); }
+// Debus macros
+bool    DEBUG = true;       
+#define DebugPrint(x);           if(DEBUG){Serial.print(x);}   
+#define DebugPrintln(x);         if(DEBUG){Serial.println(x);}
 
-// === PRIVATE credentials =====
-// -- DEFINE YOUR OWN CREDENTIALS IN private_credentials.ino -- //
-// THIS SECTION BELOW IS DEPRECATED //
+#pragma endregion Libraries Macros
 
-const char* OPENAI_KEY = "";
-const char* GROQ_KEY = "";
-const char* ELEVENLABS_KEY = "";
-const char* DEEPGRAM_KEY = "";
-// also includes wmSsid, wmPwd
+#pragma region Pinout
 
-// === user settings ==========
-int gl_VOL_INIT = 21;
-int gl_VOL_STEPS[] = { 0, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21 };
-
-// --- PCB: ESP32-S3 Dev
-#define pin_I2S_DOUT 16  // I2S_DOUT + I2S_LRC + I2S_BCLK are the I2S Audio OUT pins (e.g. for I2S Amplifier MAX98357)
-#define pin_I2S_LRC 8    // (Hint 1: I2S INPUT pins via Microphone INMP441: see header in 'lib_audio_recording.ino')
+#define pin_I2S_DOUT 16  
+#define pin_I2S_LRC 8   
 #define pin_I2S_BCLK 3
-#define pin_TOUCH NO_PIN     // # KALO mod # - self soldered RECORD TOUCH (free: ESP32 12,14,32 / ESP32-S3: 3,12,14)
-#define NO_PIN -1            // 'not connected' value for optional controls: RECORD_BTN | TOUCH | VOL_POTI | VOL_BTN
-#define pin_VOL_POTI NO_PIN  // no analogue wheel POTI available, using VOL_BTN for audio volume control
-#define pin_VOL_BTN 41       // # KALO mod # - using original RECORD side button used as audio volume control
-#define pin_RECORD_BTN 38    // # KALO mod # - no 2nd button available (original RECORD side btn on pin 2 used as VOL_BTN)
+#define pin_VOL_BTN 41      
+#define pin_RECORD_BTN 38   
 
-// --- global Objects ----------
+#define pin_DHT 40
+#define pin_LDR_AO 4
 
-Audio audio_play;  // AUDIO.H object for I2S stream
-
-uint32_t gl_TOUCH_RELEASED;  // idle value (untouched), read once on Init, used internally as reference in loop()
-String gl_voice_instruct;    // internally used for forced 'voice character' (via command "VOICE", erased on friend changes)
-
-Preferences prefs;  // Dependencies: lib_wifi, lib_sys
-
-WiFiManager wm;  // WiFi global objects - Dependencies: main, lib_wifi
-bool wmShouldSaveConfig = false;
-String wmSsid;
-String wmPwd;
-
-// -- SYSTEM STRINGS ---
-
-const char* systrReset = "RESET button\nis pressed!";
-
-const char* wmBroadcast = "CAY XANH LILY";
-const char* wmsPleaseConfig = "Kết nối\n'CAY XANH LILY'\nto configure";
-const char* wmsSaveRequest = "Receiving data\nfrom WiFiManager...";
-const char* wmsSaveSuccess = "WiFi credentials\nare saved\nsuccessfully. Wait...";
-const char* wmsReading = "Reading WiFi\nconfiguration...";
-const char* wmsEstablished = "Connection established. Ready!";
-
-// --- SENSORS CONFIGURATION ---
-
-const int DHTPIN = 40;
-const int DHTTYPE = DHT11;
-DHT dht(DHTPIN, DHTTYPE);
-
-const int LDR_AO = 4;
-
-int ssLightAo;
-float ssHumidity;
-float ssTemperature;
-
-bool flg_RECORD_BTN;
-bool flg_RECORD_TOUCH = false;
-
-// --- TFT SCREEN ---
 #define LCD_CS 10
 #define LCD_DC 11
 #define LCD_SCLK 14
 #define LCD_MOSI 13
 #define LCD_RST 12
+
+#pragma endregion Pinout
+
+#pragma region Global objects
+
+// --- CREDENTIALS ---
+// Define your own in [private_credentials.ino]
+// the below is deprecated and will be fetched again on startup
+// also includes WiFiManager's SSID and Passkey
+const char* OPENAI_KEY = "";
+const char* GROQ_KEY = "";
+const char* ELEVENLABS_KEY = "";
+const char* DEEPGRAM_KEY = "";
+
+Audio audio_play;   // Audio.h object
+
+int gl_VOL_INIT = 21;
+int gl_VOL_STEPS[] = { 0, 3, 5, 7, 9, 11, 13, 15, 17, 19, 21 };
+
+Preferences prefs;  // Dependencies: lib_wifi, lib_sys
+
+WiFiManager wm;     // WiFi global objects - Dependencies: main, lib_wifi
+bool wmShouldSaveConfig = false;
+String wmSsid;
+String wmPwd;
+
+// --- SENSORS CONFIGURATION ---
+const int DHTPIN = pin_DHT;
+const int DHTTYPE = DHT11;
+DHT dht(DHTPIN, DHTTYPE);
+
+const int LDR_AO = pin_LDR_AO;
+
+int ssLightAo;
+float ssHumidity;
+float ssTemperature;
+int ssBattery;
+
 Adafruit_ST7735 display = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
 U8G2_FOR_ADAFRUIT_GFX tft;
 
-// --- last not least: declaration of functions in other modules (not mandatory but ensures compiler checks correctly)
-// splitting Sketch into multiple tabs see e.g. here: https://www.youtube.com/watch?v=HtYlQXt14zU
+#pragma endregion Global objects
+
+#pragma region Prototypes
 
 bool I2S_Recording_Init();
 bool Recording_Loop();
@@ -134,270 +111,206 @@ void wmInit();
 
 void sysFetchCreds();
 
-#pragma endregion DECLARATION
+#pragma endregion Prototypes
 
-// ******************************************************************************************************************************
+#pragma region Strings
 
-void setup() {
-  // Initialize serial communication
-  Serial.begin(115200);
-  Serial.println("SERIAL INITIALIZED");
+const char* systrReset = "Đặt lại\ncấu hình.";
 
-  // Hello World
-  Serial.println(VERSION);
+const char* wmBroadcast = "NOVA";
+const char* wmsPleaseConfig = "Kết nối\n[NOVA] và\ntruy cập\n192.168.4.1.";
+const char* wmsSaveRequest = "Đang nhận...";
+const char* wmsSaveSuccess = "Thiết lập\nthành công\nChờ...";
+const char* wmsReading = "Đang đọc\ncấu hình...";
+const char* wmsEstablished = "Kết nối\nthành công!";
 
-  Serial.println("INITIALIZING SYSTEM COMPONENTS (WF + SCR + SENSORS)...");
+#pragma endregion Strings
+
+void setup() 
+{     
+  Serial.begin(115200); 
+  Serial.setTimeout(100);
+  Serial.println("SYS Serial initialized!");
+
+  if (pin_RECORD_BTN != NO_PIN) {pinMode(pin_RECORD_BTN,INPUT_PULLUP); }  
+  if (pin_VOL_BTN    != NO_PIN) {pinMode(pin_VOL_BTN,   INPUT_PULLUP); }  
+  Serial.println("SYS Digital pushbuttons set!");
+
+  Serial.println("SYS Initializing components...");
   sysInit();
-  Serial.println("SYSTEM COMPONENTS INITIALIZED");
+  Serial.println("SYS Components e.g. Screen + Prefs + WiFi + sensors")
 
-  // Digital INPUT pin assignments (not needed for analogue pin_VOL_POTI & pin_TOUCH)
-  // Detail: Some ESP32 pins do NOT support INPUT_PULLUP (e.g. pins 34-39), external resistor still needed
-  if (pin_RECORD_BTN != NO_PIN) { pinMode(pin_RECORD_BTN, INPUT_PULLUP); }
-  if (pin_VOL_BTN != NO_PIN) { pinMode(pin_VOL_BTN, INPUT_PULLUP); }
-
-  I2S_Recording_Init();
-  Serial.println("I2S RECORDING INITIALIZED");
-
+  I2S_Recording_Init();    
+  Serial.println("SYS I2S Recording initialized!");
+    
   // INIT Audio Output (via Audio.h, see here: https://github.com/schreibfaul1/ESP32-audioI2S)
-  audio_play.setPinout(pin_I2S_BCLK, pin_I2S_LRC, pin_I2S_DOUT);
-  audio_play.setVolume(gl_VOL_INIT);
-  Serial.println("I2S PLAYBACK INITIALIZED");
-
-  // INIT done, starting user interaction
-  Serial.println("\nWorkflow:\n> Hold or Touch button during recording voice -OR- enter request in Serial Monitor");
-  Serial.println("> Key word [RADIO | DAILY NEWS | TAGESSCHAU] inside request: start audio url streaming");
-  Serial.println("========================================================================================\n");
-
-  Serial.println("INITIALIZATION COMPLETED");
+  audio_play.setPinout( pin_I2S_BCLK, pin_I2S_LRC, pin_I2S_DOUT );
+  audio_play.setVolume( gl_VOL_INIT );  
+  Serial.println("SYS I2S Playback initialized!");
+  
+  Serial.println("SYS All set! READY!");
 }
 
-// ******************************************************************************************************************************
+void loop() 
+{
+  String UserRequest;                   // user request, initialized new each loop pass 
+  String LLM_Feedback;                  // LLM AI response
+  static String LLM_Feedback_before;    // static var to keep information from last request (as alternative to global var)
+  static bool flg_UserStoppedAudio;     // both static vars are used for 'Press button' actions (stop Audio a/o repeat LLM)
 
-// Kiểm tra xem đã chạy OpenAI xong chưa, rồi mới đo sensor
-bool flg_AI_FINISHED = false;
-
-void loop() {
-  // Code logic chính (đẩy xuống cho đỡ rối)
-  MainLoop();
-  
-  // ----------------------------------------------------------------------------------------------------------------------------
-  // Play AUDIO (Schreibfaul1 loop for Play Audio (details here: https://github.com/schreibfaul1/ESP32-audioI2S))
-  // and updating LED status
-  
-  audio_play.loop();
-  vTaskDelay(1);
-  delay(100);
-
-  if (flg_RECORD_BTN == LOW) {
-    //scrShowMessage("LISTENING...");
-  } else if (audio_play.isRunning()) {
-    //scrShowMessage("SPEAKING...");
-  } else if (flg_AI_FINISHED) {
-    sysReadSensors();
-    Serial.println("---");
-    Serial.println(ssLightAo);
-    Serial.println(ssTemperature);
-    Serial.println(ssHumidity);
-    //scrShowStatus();
-    //scrShowMessage("REQ READY");
-  }
-  else { }
-}
-
-// end of LOOP() ****************************************************************************************************************
-
-void MainLoop()
-{  
-  flg_RECORD_BTN = false;
-  flg_RECORD_TOUCH = false;
-
-  String UserRequest = "";            // user request, initialized new each loop pass
-  String LLM_Feedback;                // LLM AI response
-  static String LLM_Feedback_before;  // static var to keep information from last request (as alternative to global var)
-  static bool flg_UserStoppedAudio;   // both static vars are used for 'Press button' actions (stop Audio a/o repeat LLM)
-
-  String record_SDfile;  // 4 vars are used for receiving recording details
+  String   record_SDfile;               // 4 vars are used for receiving recording details               
   uint8_t* record_buffer;
-  long record_bytes;
-  float record_seconds;
-
-  // ------ Read USER INPUT via Serial Monitor (fill String UserRequest and ECHO after CR entered) ------------------------------
-  // ESP32 as TEXT Chat device: this allows to use the Serial Monitor as an LLM AI text chat device
-  // HINT: hidden feature (covered in lib_openai_groq.ino): Keyword '#' in Serial Monitor prints the history of complete dialog
-
-  while (Serial.available() > 0)  // definition: returns numbers ob chars after CR done
-  {                               // we end up here only after Input done
-                                  // this 'while loop' is a NOT blocking loop script :)
-    UserRequest = Serial.readStringUntil('\n');
-
-    // Clean the input line first:
+  long     record_bytes;
+  float    record_seconds;  
+  
+  // --- ĐỌC REQUEST QUA SERIAL MONITOR ---
+  while (Serial.available() > 0)                  
+  { 
+    UserRequest = Serial.readStringUntil('\n');      
     UserRequest.replace("\r", "");
     UserRequest.replace("\n", "");
     UserRequest.trim();
+    
+    if (UserRequest != "")
+    {  Serial.println( "\nYou> [" + UserRequest + "]" );      
+    }  
+  }  
 
-    // then ECHO in monitor in [brackets] (in case the user entered more than spaces or CR only):
-    if (UserRequest != "") {
-      Serial.println("\nYou> [" + UserRequest + "]");
-    }
-  }
-
-  // ------ Check status of AUDIO RECORDING controls (supporting PUSH buttons and TOUCH buttons) --------------------------------
-  if (pin_RECORD_BTN != NO_PIN) {
-    flg_RECORD_BTN = digitalRead(pin_RECORD_BTN);
-  } else flg_RECORD_BTN = HIGH;
-
-  // ------ Read USER INPUT via Voice recording & launch Deepgram transcription -------------------------------------------------
+  // ------ Read USER INPUT via Voice recording & launch transcription ----------------------------------------------------------
   // ESP32 as VOICE chat device: Recording (as long pressing or touching RECORD) & Transcription on Release (result: UserRequest)
-  // 3 different BTN actions:  PRESS & HOLD for recording || STOP (Interrupt) LLM AI speaking || REPEAT last LLM AI answer
-
-  if (flg_RECORD_BTN == LOW || flg_RECORD_TOUCH)  // # Recording started, supporting btn and touch sensor
-  {
-    delay(30);                   // unbouncing & suppressing finger button 'click' noise
-    if (audio_play.isRunning())  // Before we start any recording: always stop earlier Audio
-    {
-      audio_play.stopSong();  // [bug fix]: previous audio_play.connecttohost() won't work
-      Serial.println("\n< STOP AUDIO >");
-      flg_UserStoppedAudio = true;  // to remember later that user stopped (distinguish to REPEAT)
-    }
-    // Now Starting Recording (no blocking, not waiting)
-    Recording_Loop();  // that's the main task: Recording AUDIO (ongoing)
+  // 3 different BTN actions:  PRESS & HOLD for recording || STOP (Interrupt) LLM AI speaking || REPEAT last LLM AI answer  
+  bool flg_RECORD_BTN = digitalRead(pin_RECORD_BTN);       
+  if ( flg_RECORD_BTN == LOW ) {
+     delay(30);                                                   // unbouncing & suppressing finger button 'click' noise 
+     if (audio_play.isRunning())                                  // Before we start any recording: always stop earlier Audio 
+     {  audio_play.stopSong();                                    // [bug fix]: previous audio_play.connecttohost() won't work
+        Serial.println( "\n< STOP AUDIO >" );
+        flg_UserStoppedAudio = true;                              // to remember later that user stopped (distinguish to REPEAT)    
+     }   
+     // Now Starting Recording (no blocking, not waiting)
+     Recording_Loop();                                            // that's the main task: Recording AUDIO (ongoing)  
   }
 
-  if (flg_RECORD_BTN == HIGH && !flg_RECORD_TOUCH)  // Recording not started yet OR stopped (on release button)
-  {
-    // now we check if RECORDING is done, we receive recording details (length etc..) via &pointer
-    // hint: Recording_Stop() is true ONCE when recording finalized and .wav is available
-
-    if (Recording_Stop(&record_SDfile, &record_buffer, &record_bytes, &record_seconds)) {
-      if (record_seconds > 0.4)  // using short btn TOUCH (<0.4 secs) for other actions
-      {
-        Serial.println("ELEVENLABS STARTING...");
-        Serial.println("\nYou {STT}> ");
-
-        // Action happens here! -> Launching SpeechToText (STT) transcription (WAITING until done)
-        // using ElevenLabs STT as default (best performance, multi-lingual, high accuracy (language & word detection)
-        // Reminder: as longer the spoken sentence, as better the results in language and word detection ;)
-
-        UserRequest = SpeechToText_ElevenLabs(record_SDfile, record_buffer, record_bytes, "", ELEVENLABS_KEY);
-        if (UserRequest != "")  // Done!. In case we got a valid spoken transcription:
-        {
-          Serial.println("TRANSCRIPT WAS SUCCESSFUL");
+  // Nếu bấm RECORD hơn 0.4s  >> ghi âm
+  // Nếu không                >> lặp lại Feedback trước
+  if ( flg_RECORD_BTN == HIGH ) 
+  {  
+     if (Recording_Stop( &record_SDfile, &record_buffer, &record_bytes, &record_seconds )) 
+     {  if (record_seconds > 0.4)                                 // using short btn TOUCH (<0.4 secs) for other actions
+        { 
+           Serial.print( "\nYou {STT}> " );                       // function SpeechToText_Deepgram will append '...'
+           UserRequest = SpeechToText_ElevenLabs( record_SDfile, record_buffer, record_bytes, "", ELEVENLABS_KEY );
+           Serial.println( "[" + UserRequest + "]" );            
+           
+           Serial.println("ELEVENLABS Transcript was successful.")           
         }
-        Serial.println("[" + UserRequest + "]");  // printing result in Serial Monitor always
-      } else                                      // 2 additional Actions on short button PRESS (< 0.4 secs):
-      {
-        if (!flg_UserStoppedAudio)  // - STOP AUDIO when playing (done above, if Btn == LOW)
-        {
-          Serial.println("< REPEAT TTS >");    // - REPEAT last LLM answer (if audio currently not playing)
-          LLM_Feedback = LLM_Feedback_before;  // hint: REPEAT is also helpful in the rare cases when Open AI
-        }                                      // TTS 'missed' speaking: just tip btn again for triggering
-        else {                                 // Trick: allow <REPEAT TTS> on next BTN release (LOW->HIGH) after next short recording
-          flg_UserStoppedAudio = false;
+        else                                                      // 2 additional Actions on short button PRESS (< 0.4 secs):
+        { if (!flg_UserStoppedAudio)                              // - STOP AUDIO when playing (done above, if Btn == LOW)
+          {  Serial.println( "< REPEAT TTS >" );                  // - REPEAT last LLM answer (if audio currently not playing)
+             LLM_Feedback = LLM_Feedback_before;                  // hint: REPEAT is also helpful in the rare cases when Open AI
+          }                                                       // TTS 'missed' speaking: just tip btn again for triggering    
+          else 
+          {  // Trick: allow <REPEAT TTS> on next BTN release (LOW->HIGH) after next short recording
+             flg_UserStoppedAudio = false;                        
+          }
         }
-      }
-    }
-  }
-
+     }      
+  }  
+  
   // ------ USER REQUEST found -> Checking KEYWORDS first -----------------------------------------------------------------------
-
   String cmd = UserRequest;
   cmd.toUpperCase();
   cmd.replace(".", "");
 
-  // 1. keyword 'RADIO' inside the user request -> Playing German RADIO Live Stream: SWR3
-  if (cmd.indexOf("RADIO") >= 0) {
-    Serial.println("< Streaming German RADIO: SWR3 >");
-    // HINT !: the streaming can fail on some ESP32 without PSRAM (AUDIO.H issue!), in this case: deactivate/remove next line:
-    audio_play.connecttohost("https://liveradio.swr.de/sw282p3/swr3/play.mp3");
-    UserRequest = "";  // do NOT start LLM
-  }
+  // RADIO
+  if (cmd.indexOf("RADIO") >=0 )
+  {  Serial.println( "< Streaming German RADIO: SWR3 >" );  
+     audio_play.connecttohost( "https://liveradio.swr.de/sw282p3/swr3/play.mp3" ); 
+     UserRequest = "";
+  } 
 
   // ------ USER REQUEST found -> Call OpenAI_Groq_LLM() ------------------------------------------------------------------------
-  // #NEW: Update: Utilizing new 'real-time' web search feature in case user request contains the keyword 'GOOGLE'
-  // [using same 'OpenAI_Groq_LLM(..)' function with additional parameter (function switches to dedicated LLM search model]
-  // Recap: OpenAI_Groq_LLM() remembers complete history (appending prompts) to support ongoing dialogs (web searches included;)
-
-  if (UserRequest != "") {
-
-   // Bugfix 11/12/25: ChatGPT không trả lời (fix: chờ cho đến khi flag true)
-   flg_AI_FINISHED = false;
-
-   // 10/12/25 Thêm string Sensors vào cho prompt
-   UserRequest = sysGetSensorsString() + UserRequest;
-   Serial.println("Full prompt > [" + UserRequest + "]");
-
+  if (UserRequest != "" ) 
+  { 
     // [bugfix/new]: ensure that all TTS websockets are closed prior open LLM websockets (otherwise LLM connection fails)
-    audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP)
-
+    audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP) 
+    
     // CASE 1: launch Open AI WEB SEARCH feature if user request includes the keyword 'Google'
-    // supporting User requests like 'Will it rain tomorrow in my region?, please ask Google'
+    if ( UserRequest.indexOf("Google") >= 0 || UserRequest.indexOf("GOOGLE") >= 0 )                          
+    {  
+       Serial.print( "LLM AI WEB SEARCH> " );                     // function OpenAI_Groq_LLM() will Serial.print '...'
+       
+       // 1. forcing a short answer via appending prompt postfix - hard coded GOAL:
+       String Postfix = ". Tóm tắt trong vài câu, tương tự như nói chuyện, KHÔNG dùng liệt kê, ngắt dòng hay liên kết đến các trang web!"; 
+       String Prompt_Enhanced = UserRequest + Postfix;   
+                                                                            
+       // Action happens here! (WAITING until Open AI web search is done)        
+       LLM_Feedback = OpenAI_Groq_LLM( Prompt_Enhanced, OPENAI_KEY, true, GROQ_KEY );   // 'true' means: launch WEB SEARCH model
 
-    if (UserRequest.indexOf("Google") >= 0 || UserRequest.indexOf("GOOGLE") >= 0) {
-      Serial.print("LLM AI WEB SEARCH> ");  // function OpenAI_Groq_LLM() will Serial.print '...'
-
-      // Ép câu trả lời ngắn postfix
-      String Postfix = ". Tóm tắt trong vài câu, tương tự như nói chuyện, KHÔNG dùng liệt kê, ngắt dòng hay liên kết đến các trang web!";
-      String Prompt_Enhanced = UserRequest + Postfix;
-      LLM_Feedback = OpenAI_Groq_LLM(Prompt_Enhanced, OPENAI_KEY, true, GROQ_KEY);  // 'true' means: launch WEB SEARCH model
-
-      // Loại links
-      int any_links = LLM_Feedback.indexOf("([");
-      if (any_links > 0)                           
-      {
-        Serial.println("\n>>> RAW: [" + LLM_Feedback + "]");        // Serial Monitor: printing both, TTS: uses cutted only
-        LLM_Feedback = LLM_Feedback.substring(0, any_links) + "|";  // ('|' just as 'cut' indicator for Serial Monitor)
-        Serial.print(">>> CUTTED for TTS:");
-      }
+       // 2. even in case WEB_SEARCH_ADDON contains a instruction 'no links please!: there are still rare situation that 
+       // links are included (eof search results). So we cut them manually  (prior sending to TTS / Audio speaking)
+       
+       int any_links = LLM_Feedback.indexOf( "([" );                    // Trick 2: searching for potential links at the end
+       if ( any_links > 0 )                                             // (they typically start with '([..'  
+       {  Serial.println( "\n>>> RAW: [" + LLM_Feedback + "]" );        // Serial Monitor: printing both, TTS: uses cutted only  
+          LLM_Feedback = LLM_Feedback.substring(0, any_links) + "|";    // ('|' just as 'cut' indicator for Serial Monitor)
+          Serial.print( ">>> CUTTED for TTS:" );    
+       } 
     }
-
-    else  // CASE 2 [DEFAULT]: LLM chat completion model (for human like conversations)
-
-    {
-      Serial.print("LLM AI CHAT> ");  // function OpenAI_Groq_LLM() will Serial.print '...'
-
-      // Action happens here! (WAITING until Open AI or Groq done)
-      LLM_Feedback = OpenAI_Groq_LLM(UserRequest, OPENAI_KEY, false, GROQ_KEY);  // 'false' means: default CHAT model
+    
+    else  // CASE 2 [DEFAULT]: LLM chat completion model (for human like conversations)  
+    {  Serial.print( "LLM AI CHAT> " );                           // function OpenAI_Groq_LLM() will Serial.print '...'
+       LLM_Feedback = OpenAI_Groq_LLM( UserRequest, OPENAI_KEY, false, GROQ_KEY );    // 'false' means: default CHAT model                                 
     }
-
-    // final tasks (always):
-
-    if (LLM_Feedback != "")  // in case we got any valid feedback ..
-    {
-      int id;
-      String names, model, voice, vspeed, instruction, welcome;  // to get name of current LLM agent (friend)
-      get_tts_param(&id, &names, &model, &voice, &vspeed, &instruction, &welcome);
-      Serial.println(" [" + names + "]" + " [" + LLM_Feedback + "]");
-
-      LLM_Feedback_before = LLM_Feedback;
-    } else Serial.print("answer socket empty\n");
+          
+    // ------ FINAL TASKS -------------------------------------------------------------------------------------------------------
+    if (LLM_Feedback != "")                                       // in case we got any valid feedback ..  
+    {      
+      int id;  String names, model, voice, vspeed, instruction, welcome;     // to get name of current LLM agent (friend)                  
+      get_tts_param( &id, &names, &model, &voice, &vspeed, &instruction, &welcome );      
+      Serial.println( " [" + names + "]" + " [" + LLM_Feedback + "]" );  
+          
+      LLM_Feedback_before = LLM_Feedback;                           
+    }           
+    else Serial.print("\n");   
   }
 
   // ------ Speak LLM answer (using Open AI voices by default, all voice settings done in TextToSpeech() ------------------------
-
-  if (LLM_Feedback != "") {
-    Serial.println("TTS PENDING");
-
-    // simple TTS call: TextToSpeech() manages all voice parameter for current active AI agent (FRIEND[x])
-    TextToSpeech(LLM_Feedback);
+  if (LLM_Feedback != "") 
+  {  
+     Serial.println("OPENAI TTS Pending...");
+     TextToSpeech( LLM_Feedback );         
   }
-
-  flg_AI_FINISHED = true;
-
-  if (pin_VOL_BTN != NO_PIN)  // --- Alternative: using a VOL_BTN to toggle thru N values (e.g. TECHISMS or Elato AI pcb)
-  {
-    static bool flg_volume_updated = false;
-    static int volume_level = -1;
-    if (digitalRead(pin_VOL_BTN) == LOW && !flg_volume_updated) {
-      int steps = sizeof(gl_VOL_STEPS) / sizeof(gl_VOL_STEPS[0]);  // typically: 3 steps (any arrays supported)
-      volume_level = ((volume_level + 1) % steps);                 // walking in circle (starting with 0): e.g. 0 -> 1 -> 2 -> 0 ..
-      Serial.println("New Audio Volume: [" + (String)volume_level + "] = " + (String)gl_VOL_STEPS[volume_level]);
-      flg_volume_updated = true;
-      audio_play.setVolume(gl_VOL_STEPS[volume_level]);
+   
+  // ------ Điều chỉnh âm lượng -------------------------------------------------------------------------------------------------    
+  if (pin_VOL_BTN != NO_PIN)      // --- Alternative: using a VOL_BTN to toggle thru N values (e.g. TECHISMS or Elato AI pcb)
+  {  static bool flg_volume_updated = false; 
+     static int volume_level = -1; 
+     if (digitalRead(pin_VOL_BTN) == LOW && !flg_volume_updated)          
+     {  int steps = sizeof(gl_VOL_STEPS) / sizeof(gl_VOL_STEPS[0]);
+        volume_level = ((volume_level+1) % steps);  
+        Serial.println( "New Audio Volume: [" + (String) volume_level + "] = " + (String) gl_VOL_STEPS[volume_level] );
+        flg_volume_updated = true;
+        audio_play.setVolume( gl_VOL_STEPS[volume_level] );  
     }
-    if (digitalRead(pin_VOL_BTN) == HIGH && flg_volume_updated) {
-      flg_volume_updated = false;
+    if (digitalRead(pin_VOL_BTN) == HIGH && flg_volume_updated)         
+    {  flg_volume_updated = false;    
     }
   }
+  
+  // ----------------------------------------------------------------------------------------------------------------------------
+  // Play AUDIO (Schreibfaul1 loop for Play Audio (details here: https://github.com/schreibfaul1/ESP32-audioI2S))
+  audio_play.loop();  
+  vTaskDelay(1); 
+
+  // update LED status always (in addition to WHITE flashes + YELLOW on STT + BLUE on LLM + CYAN on TTS)
+  if (flg_RECORD_BTN==LOW)
+    { /*Đang nghe*/ }  
+  else if (audio_play.isRunning())
+    { /*Đang nói*/ }  
+  else
+    { /*Chờ*/ }  
+    
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
@@ -407,26 +320,26 @@ void MainLoop()
 // - IMPORTANT: Be aware of AUDIO.H dependency -> CHECK bottom line (UPDATE in case older AUDIO.H used) to avoid COMPILER ERRORS!
 // ------------------------------------------------------------------------------------------------------------------------------
 
-void TextToSpeech(String p_request) {
-  // OpenAI voices are multi-lingual :) .. 9 tts-1 voices (August 2025): alloy|ash|coral|echo|fable|onyx|nova|sage|shimmer
-  // Supported audio formats (response): aac | mp3 | wav (sample rate issue) | flac (PSRAM needed)
-  // Known AUDIO.H issue: Latency delay (~1 sec) before voice starts speaking (performance improved with latest AUDIO.H)
+void TextToSpeech( String p_request ) 
+{   
+   // Params of AUDIO.H .openai_speech():
+   // - model:          Available TTS models: tts-1 | tts-1-hd | gpt-4o-mini-tts (gpt models needed for 'voice instruct' !)
+   // - request:        The text to generate audio for. The maximum length is 4096 characters.
+   // - voice_instruct: (Optional) forcing voice style (e.g. "you are whispering"). Needs AUDIO.H >= 3.1.0 & gpt-xy-tts !
+   // - voice:          Voice name (multilingual), May 2025: alloy|ash|coral|echo|fable|onyx|nova|sage|shimmer
+   // - format:         supported audio formats: aac | mp3 | wav (sample rate issue) | flac (PSRAM needed) 
+   // - vspeed:         The speed of the generated voice. Select a value from 0.25 to 4.0. DEFAULT: 1.0
+   
+   static int id_before; 
+   int id; String names, model, voice, vspeed, instruction, welcome;
+   get_tts_param( &id, &names, &model, &voice, &vspeed, &instruction, &welcome );  // requesting tts values for current FRIEND
+   
+   if (id != id_before) { gl_voice_instruct = ""; id_before = id; } // reset forced voice instruction if FRIEND changed
+   if (gl_voice_instruct != "" ) {instruction = gl_voice_instruct;} // user forced 'voice command' overrides FRIENDS[].instuct
 
-  // Params of AUDIO.H .openai_speech():
-  // - model:          Available TTS models: tts-1 | tts-1-hd | gpt-4o-mini-tts (gpt models needed for 'voice instruct' !)
-  // - request:        The text to generate audio for. The maximum length is 4096 characters.
-  // - voice_instruct: (Optional) forcing voice style (e.g. "you are whispering"). Needs AUDIO.H >= 3.1.0 & gpt-xy-tts !
-  // - voice:          Voice name (multilingual), May 2025: alloy|ash|coral|echo|fable|onyx|nova|sage|shimmer
-  // - format:         supported audio formats: aac | mp3 | wav (sample rate issue) | flac (PSRAM needed)
-  // - vspeed:         The speed of the generated voice. Select a value from 0.25 to 4.0. DEFAULT: 1.0
+   Serial.print( "TTS Audio [" + names + "|" + voice + "|" + model + "]" );  // e.g. TTS AUDIO [SUSAN | nova/gpt-4o-mini-tts]  
+   if ( gl_voice_instruct != "" ) { Serial.print( "\nTTS Voice Instruction [" + gl_voice_instruct + "]" ); }
+   Serial.println();  
 
-  static int id_before;
-  int id;
-  String names, model, voice, vspeed, instruction, welcome;
-  get_tts_param(&id, &names, &model, &voice, &vspeed, &instruction, &welcome);  // requesting tts values for current FRIEND
-
-  Serial.print("TTS Audio [" + names + "|" + voice + "|" + model + "]");                      // e.g. TTS AUDIO [SUSAN | nova/gpt-4o-mini-tts]
-  audio_play.openai_speech(OPENAI_KEY, model, p_request, instruction, voice, "aac", vspeed);  // <- use if version >= 3.1.0u
-  
-  flg_AI_FINISHED = true;
+   audio_play.openai_speech( OPENAI_KEY, model, p_request, instruction, voice, "aac", vspeed);  // <- use if version >= 3.1.0u 
 }

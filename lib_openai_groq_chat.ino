@@ -1,15 +1,14 @@
 #define  ENABLE_DEBUG
-
-// --- user preferences --------  
 #define WEB_SEARCH_USER_CITY     "Đồng Nai, Vietnam" // optional (recommended): User location optimizes OpenAI 'web search'
 #define TIMEOUT_LLM  10          // preferred max. waiting time [sec] for LMM AI response     
 
-int gl_CURR_FRIEND = 0;   
-#define WAKEUP_FRIENDS_ENABLED   false
-            
+int gl_CURR_FRIEND = 0;      
+#define WAKEUP_FRIENDS_ENABLED   false                            
+                                 
+
 // --- global Objects ---------- 
 
-String  MESSAGES;  
+String  MESSAGES;               
 struct  Agents                   // General Structure of each Chat Bot (friend) - DO NOT TOUCH ! 
 { const char* names;             // supporting multiple names for same guy (1-N synonyms, ' ' as limiter) - always UPPER CASE !
   const char* tts_model;         // typical values: "gpt-4o-mini-tts" or fast "tts-1" (sound different, so we utilize both)
@@ -19,17 +18,16 @@ struct  Agents                   // General Structure of each Chat Bot (friend) 
   const char* welcome;           // Spoken Welcome message on Power On Init (optional)
   const char* prompt;            // System PROMPT (Role / Personality)
 };
-
-const Agents FRIENDS[] =                           
+const Agents FRIENDS[] =                                 // UPDATE HERE !: Define as many FRIENDS you want ... 
 {  
   { "LILY",                      
-    "tts-1", "alloy", "1",              
+    "tts-1", "nova", "1",              
     "bạn có một giọng đọc nhẹ nhàng, vui tươi", 
-    "Chào bạn, mình là Lily, cây xanh của bạn đây!",  // Welcome Message
+    "Chào bạn, mình là Nova, cây xanh của bạn đây!",  // Welcome Message
     // -- System PROMPT ----------------------------  
-    "Bạn là một cây xanh nhỏ nhắn trò chuyện với tớ, bạn là một người bạn tốt của tớ."
+    "Bạn là một cây xanh nhỏ nhắn trò chuyện với tớ, tên là Nova, bạn là một người bạn tốt của tớ."
     "Mình xin phép không tiết lộ tên, nhưng bạn rất niềm nở và hân hoan khi nói chuyện với mình."
-    "Bạn có cá tính hài hước, thích nói chuyện với mình và hay cho mình lời khuyên."
+    "Bạn có cá tính hài hước, vui vẻ và hay cho mình lời khuyên."
     "Bạn luôn luôn trả lời trong vài câu ngắn gọn, không quá dài dòng."    
   }
 };
@@ -62,7 +60,7 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
        Serial.println( ">> FREE HEAP: " + (String) ESP.getFreeHeap() );                
        return("OK");  // Done. leave. Simulating an 'OK' as LLM answer -> will be spoken in main.ini (TTS)
     }        
-
+      
     // =====- Prep work done. Now CONNECT to Open AI or Groq Server (on INIT or after closed or lost connection) ================
 
     uint32_t t_start = millis(); 
@@ -252,6 +250,19 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     return ( Feedback );                           
 }
 
+// ------------------------------------------------------------------------------------------------------------------------------
+// bool WordInStringFound( String sentence, String pattern ) - a bit complex String function (OpenAI ChatCPT helped in coding :))
+// [Internal private String function, used in this lib.ino only]
+// ------------------------------------------------------------------------------------------------------------------------------
+// - Function checks if 'sentence' contains any single words which are listed in 'pattern' (pattern has 1-N space limited words)
+// - case sensitive, but ignoring all punctuations (".,;:!?\"'-()[]{}") in sentence (replacing with ' ')
+// CALL:     Call function on demand (used once in OpenAI_Groq_LLM() for waking up (initializing) any friend (calling by name)
+// Params:   String sentence (e.g. user request transcription), String pattern with a list of 1-N words (space limited)
+// RETURN:   true if 1 or more pattern (word) found, false if nothing found or empty strings
+// Examples: WordInStringFound( "Hello friend!, this is a test", "my xyz friend" ) -> true (friend matches. '!' doesn't matter)
+//           WordInStringFound( "Hello friend2, this is a test", "cde my friend" ) -> false (no pattern word found2 in sentence) 
+//           WordInStringFound( "I jump over to VEGGIE. Are you online?", "VEGGI VEGGIE WETCHI WEDGIE" ) -> true (VEGGIE found)
+
 bool WordInStringFound( String sentence, String pattern ) 
 { 
   // replacing any punctuations in sentence with ' '
@@ -269,6 +280,16 @@ bool WordInStringFound( String sentence, String pattern )
   }
   return false;
 }
+
+
+
+// ------------------------------------------------------------------------------------------------------------------------------
+// void get_tts_param( 'return N values by pointer' )
+// PUBLIC function - Intended use: allows TextToSpeech() in main.ino to get all predefined tts parameter of current FRIEND[x]
+// ------------------------------------------------------------------------------------------------------------------------------
+// Idea: Keeping whole global FRIENDS[] array 'private' for this .ino, no read/write access outside (workaraound instead .cpp/.h)
+// All values are returned via pointer (var declaration and instance have to be allocated in calling function !)
+// Params: Agent_id [0-N], 1st friend name, tts-model, tts-voice, tts-vspeed, tts-voice -instruction, welcome_hello  
 
 void get_tts_param( int* id, String* names, String* model, String* voice, String* vspeed, String* inst, String* hello )
 {  
