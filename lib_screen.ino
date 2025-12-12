@@ -1,37 +1,44 @@
 void scrInit() {
   SPI.begin(LCD_SCLK, -1, LCD_MOSI, LCD_CS);
   delay(100);
-  tft.initR(INITR_144GREENTAB);
-  tft.setRotation(0);
+  display.initR(INITR_144GREENTAB);
+  display.setRotation(0);
+  tft.begin(display);
+
+  display.fillScreen(ST77XX_WHITE);      
+  tft.setFontMode(1);          
+  tft.setFontDirection(0);   
+  tft.setBackgroundColor(ST77XX_WHITE);        
+  tft.setForegroundColor(ST77XX_BLACK);
+  tft.setFont(u8g2_font_courR08_tf);  
+}
+
+void scrDrawIcon(const uint8_t x, const uint8_t y, const unsigned char icon[]) {
+
+}
+
+void scrDrawMessage(const uint8_t x, const uint8_t y, const char* msg)
+{
+  tft.setCursor(x, y);
+  tft.println(msg);
+}
+
+void scrShowMessageWithIcon(const char* msg, const unsigned char icon[]) {  
+  display.fillScreen(ST77XX_WHITE);    
+  scrDrawIcon(52, 8, icon);
+  scrDrawMessage(2, 60, msg);
 }
 
 void scrShowMessage(const char* msg) {
-  Serial.print("diag ");
-  Serial.println(msg);
+  display.fillScreen(ST77XX_WHITE);    
+  scrDrawMessage(2, 2, msg);
 }
 
 void scrShowStatus() {
-  tft.setCursor(0, 0);
-  tft.fillScreen(ST77XX_WHITE);
-  tft.setTextColor(ST77XX_BLACK);
-  tft.setTextSize(1);
-
-  tft.print("Light AO: ");
-  tft.println(ssLightAo);
-  tft.print("Temp: ");
-  tft.println(ssTemperature);
-  tft.print("Humidity: ");
-  tft.println(ssHumidity);
-  tft.print("Battery: ");
-  tft.println(90);
 }
 
 void scrStartUp() {
+  display.fillScreen(ST77XX_WHITE);    
   tft.setCursor(0, 0);
-  tft.fillScreen(ST77XX_WHITE);
-  tft.setTextColor(ST77XX_GREEN);
-  tft.setTextSize(2);
   tft.print("LILY");
 }
-
-void scrShow

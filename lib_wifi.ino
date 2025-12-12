@@ -28,7 +28,7 @@ void wmConfig() {
 
 void wmConnect() {
   wmReadCreds();
-  wm.autoConnect(wmSsid, wmPwd);
+  wm.autoConnect(wmSsid.c_str(), wmPwd.c_str());
   scrShowMessage(wmsEstablished);
 }
 

@@ -14,9 +14,8 @@
 #include <DHT.h>               // Dependencies: lib_sys
 
 // Screen libraries
-// #include <Adafruit_GFX.h>
-// #include <Adafruit_ST7735.h>
-// #include <SPI.h>
+#include <Adafruit_ST7735.h>
+#include <U8g2_for_Adafruit_GFX.h>
 
 #include <Audio.h>  // @Schreibfaul1 library, used for PLAYING Audio (via I2S Amplifier) -> mandatory for TTS only
                     // [not needed for: Audio Recording - Audio STT Transcription - AI LLM Chat]
@@ -73,7 +72,7 @@ String wmPwd;
 const char* systrReset = "RESET button\nis pressed!";
 
 const char* wmBroadcast = "CAY XANH LILY";
-const char* wmsPleaseConfig = "Connect to\n'CAY XANH LILY'\nto configure";
+const char* wmsPleaseConfig = "Kết nối\n'CAY XANH LILY'\nto configure";
 const char* wmsSaveRequest = "Receiving data\nfrom WiFiManager...";
 const char* wmsSaveSuccess = "WiFi credentials\nare saved\nsuccessfully. Wait...";
 const char* wmsReading = "Reading WiFi\nconfiguration...";
@@ -100,7 +99,8 @@ bool flg_RECORD_TOUCH = false;
 #define LCD_SCLK 14
 #define LCD_MOSI 13
 #define LCD_RST 12
-//Adafruit_ST7735 tft = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
+Adafruit_ST7735 display = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
+U8G2_FOR_ADAFRUIT_GFX tft;
 
 // --- last not least: declaration of functions in other modules (not mandatory but ensures compiler checks correctly)
 // splitting Sketch into multiple tabs see e.g. here: https://www.youtube.com/watch?v=HtYlQXt14zU
@@ -173,6 +173,9 @@ void setup() {
 
 // ******************************************************************************************************************************
 
+// Kiểm tra xem đã chạy OpenAI xong chưa, rồi mới đo sensor
+bool flg_AI_FINISHED = false;
+
 void loop() {
   // Code logic chính (đẩy xuống cho đỡ rối)
   MainLoop();
@@ -185,11 +188,11 @@ void loop() {
   vTaskDelay(1);
   delay(100);
 
-  if (flg_RECORD_BTN == LOW || flg_RECORD_TOUCH) {
+  if (flg_RECORD_BTN == LOW) {
     //scrShowMessage("LISTENING...");
   } else if (audio_play.isRunning()) {
     //scrShowMessage("SPEAKING...");
-  } else {
+  } else if (flg_AI_FINISHED) {
     sysReadSensors();
     Serial.println("---");
     Serial.println(ssLightAo);
@@ -198,6 +201,7 @@ void loop() {
     //scrShowStatus();
     //scrShowMessage("REQ READY");
   }
+  else { }
 }
 
 // end of LOOP() ****************************************************************************************************************
@@ -301,8 +305,6 @@ void MainLoop()
   cmd.replace(".", "");
 
   // 1. keyword 'RADIO' inside the user request -> Playing German RADIO Live Stream: SWR3
-  // Use case example (Recording request): "Please play radio for me, thanks" -> Streaming launched
-
   if (cmd.indexOf("RADIO") >= 0) {
     Serial.println("< Streaming German RADIO: SWR3 >");
     // HINT !: the streaming can fail on some ESP32 without PSRAM (AUDIO.H issue!), in this case: deactivate/remove next line:
@@ -316,37 +318,31 @@ void MainLoop()
   // Recap: OpenAI_Groq_LLM() remembers complete history (appending prompts) to support ongoing dialogs (web searches included;)
 
   if (UserRequest != "") {
-   // Thêm string Sensors vào cho prompt
+
+   // Bugfix 11/12/25: ChatGPT không trả lời (fix: chờ cho đến khi flag true)
+   flg_AI_FINISHED = false;
+
+   // 10/12/25 Thêm string Sensors vào cho prompt
    UserRequest = sysGetSensorsString() + UserRequest;
+   Serial.println("Full prompt > [" + UserRequest + "]");
 
     // [bugfix/new]: ensure that all TTS websockets are closed prior open LLM websockets (otherwise LLM connection fails)
-    //audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP)
+    audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP)
 
     // CASE 1: launch Open AI WEB SEARCH feature if user request includes the keyword 'Google'
     // supporting User requests like 'Will it rain tomorrow in my region?, please ask Google'
 
     if (UserRequest.indexOf("Google") >= 0 || UserRequest.indexOf("GOOGLE") >= 0) {
-      Serial.println("WEB SEARCH ONGOING...");
       Serial.print("LLM AI WEB SEARCH> ");  // function OpenAI_Groq_LLM() will Serial.print '...'
 
-      // 2 workarounds are recommended to utilize the new Open AI Web Search for TTS (speaking the response).
-      // Background: New Open AI Web Search models are not intended for TTS (much too detailed, including lists & links etc.)
-      // and they are also 'less' prompt sensitive, means ignoring earlier instructions (e.g. 'shorten please!') quite often
-      // so we use 2 tricks: 1. adding a 'default' instruction each time (forcing 'short answers') + 2. removing remaining links
-      // KEEP in mind: SEARCH models are slower (response delayed) than CHAT models, so we use on (GOOGLE) demand only !
-
-      // 1. forcing a short answer via appending prompt postfix - hard coded GOAL:
+      // Ép câu trả lời ngắn postfix
       String Postfix = ". Tóm tắt trong vài câu, tương tự như nói chuyện, KHÔNG dùng liệt kê, ngắt dòng hay liên kết đến các trang web!";
       String Prompt_Enhanced = UserRequest + Postfix;
-
-      // Action happens here! (WAITING until Open AI web search is done)
       LLM_Feedback = OpenAI_Groq_LLM(Prompt_Enhanced, OPENAI_KEY, true, GROQ_KEY);  // 'true' means: launch WEB SEARCH model
 
-      // 2. even in case WEB_SEARCH_ADDON contains a instruction 'no links please!: there are still rare situation that
-      // links are included (eof search results). So we cut them manually  (prior sending to TTS / Audio speaking)
-
-      int any_links = LLM_Feedback.indexOf("([");  // Trick 2: searching for potential links at the end
-      if (any_links > 0)                           // (they typically start with '([..'
+      // Loại links
+      int any_links = LLM_Feedback.indexOf("([");
+      if (any_links > 0)                           
       {
         Serial.println("\n>>> RAW: [" + LLM_Feedback + "]");        // Serial Monitor: printing both, TTS: uses cutted only
         LLM_Feedback = LLM_Feedback.substring(0, any_links) + "|";  // ('|' just as 'cut' indicator for Serial Monitor)
@@ -373,7 +369,7 @@ void MainLoop()
       Serial.println(" [" + names + "]" + " [" + LLM_Feedback + "]");
 
       LLM_Feedback_before = LLM_Feedback;
-    } else Serial.print("\n");
+    } else Serial.print("answer socket empty\n");
   }
 
   // ------ Speak LLM answer (using Open AI voices by default, all voice settings done in TextToSpeech() ------------------------
@@ -384,6 +380,8 @@ void MainLoop()
     // simple TTS call: TextToSpeech() manages all voice parameter for current active AI agent (FRIEND[x])
     TextToSpeech(LLM_Feedback);
   }
+
+  flg_AI_FINISHED = true;
 
   if (pin_VOL_BTN != NO_PIN)  // --- Alternative: using a VOL_BTN to toggle thru N values (e.g. TECHISMS or Elato AI pcb)
   {
@@ -429,4 +427,6 @@ void TextToSpeech(String p_request) {
 
   Serial.print("TTS Audio [" + names + "|" + voice + "|" + model + "]");                      // e.g. TTS AUDIO [SUSAN | nova/gpt-4o-mini-tts]
   audio_play.openai_speech(OPENAI_KEY, model, p_request, instruction, voice, "aac", vspeed);  // <- use if version >= 3.1.0u
+  
+  flg_AI_FINISHED = true;
 }

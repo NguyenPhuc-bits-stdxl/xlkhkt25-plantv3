@@ -9,7 +9,8 @@ void sysInit() {
   dht.begin();
   wmInit();
   wmConnect();
-  //scrInit();   // under construction
+  scrInit();     
+  scrStartUp();
 
   if (sysIsResetPressed()) {
     delay(1000);
