@@ -132,6 +132,7 @@ const char* wmsEstablished = "Kết nối\nthành công!";
 
 #pragma endregion Strings
 
+#define NO_PIN -1
 #define ICO_BRAND_DIMM 32
 #define ICO_ACT_DIMM 24
 #define MSG_START_X 2
@@ -141,6 +142,10 @@ const char* wmsEstablished = "Kết nối\nthành công!";
 
 #define KIEM_TRA_CAY_XANH_INTERVAL 60000 // 60s check 1 lần về việc khó chịu
 long long KIEM_TRA_CAY_XANH_LAST_CHECKED;
+#define CAM_BIEN_INTERVAL 5000 // 5s update màn hình chờ (thông số cảm biến)
+long long CAM_BIEN_LAST_CHECKED;
+
+String gl_voice_instruct;        // internally used for forced 'voice character' (via command "VOICE", erased on friend changes)
 
 void setup() 
 {     
@@ -154,7 +159,7 @@ void setup()
 
   Serial.println("SYS Initializing components...");
   sysInit();
-  Serial.println("SYS Components e.g. Screen + Prefs + WiFi + sensors")
+  Serial.println("SYS Components e.g. Screen + Prefs + WiFi + sensors");
 
   I2S_Recording_Init();    
   Serial.println("SYS I2S Recording initialized!");
@@ -165,6 +170,7 @@ void setup()
   Serial.println("SYS I2S Playback initialized!");
   
   KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() + 300000; // postpone 5p để cho người dùng config hoặc là yên tĩnh lúc đầu
+  CAM_BIEN_LAST_CHECKED = millis() + 10000; // hoãn 10s
 
   Serial.println("SYS All set! READY!");
 }
@@ -220,7 +226,7 @@ void loop()
            UserRequest = SpeechToText_ElevenLabs( record_SDfile, record_buffer, record_bytes, "", ELEVENLABS_KEY );
            Serial.println( "[" + UserRequest + "]" );            
            
-           Serial.println("ELEVENLABS Transcript was successful.")           
+           Serial.println("ELEVENLABS Transcript was successful.");           
         }
         else                                                      // 2 additional Actions on short button PRESS (< 0.4 secs):
         { if (!flg_UserStoppedAudio)                              // - STOP AUDIO when playing (done above, if Btn == LOW)
@@ -251,7 +257,9 @@ void loop()
   if (UserRequest != "" ) 
   { 
     // Chèn string sensor vào để báo cho cây biết thông số của nó
-    UserRequest = sysGetSensorsString() + UserRequest;
+    UserRequest = sysGetSensorsString() + String("Lời nhắn từ người bạn thân: ") + UserRequest;
+    
+    Serial.println("full prompt > [" + UserRequest + "]");
 
     // [bugfix/new]: ensure that all TTS websockets are closed prior open LLM websockets (otherwise LLM connection fails)
     audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP) 
@@ -324,36 +332,40 @@ void loop()
   audio_play.loop();  
   vTaskDelay(1); 
 
-  // update LED status always (in addition to WHITE flashes + YELLOW on STT + BLUE on LLM + CYAN on TTS)
-  if (flg_RECORD_BTN==LOW)
-    { /*Đang nghe*/ }  
-  else if (audio_play.isRunning())
-    { /*Đang nói*/ }  
-  else if (millis() - KIEM_TRA_CAY_XANH_LAST_CHECKED >= KIEM_TRA_CAY_XANH_INTERVAL)
-    { /* Wishlist: Check điều kiện không thoải mái (tạm toggle qua flag UNCOMFORTABLE)*/ 
-      if (sysIsUncomfortable()) {
-         // Dừng STREAM Audio để tránh tràn heap và xung đột
-         audio_play.stopSong();
+//   if (flg_RECORD_BTN==LOW)
+//     { /*Đang nghe*/ }  
+//   else if (audio_play.isRunning())
+//     { /*Đang nói*/ }  
+//   else if (millis() - KIEM_TRA_CAY_XANH_LAST_CHECKED >= KIEM_TRA_CAY_XANH_INTERVAL)
+//     { /* Wishlist: Check điều kiện không thoải mái (tạm toggle qua flag UNCOMFORTABLE)*/ 
+//       if (sysIsUncomfortable()) {
+//          // Dừng STREAM Audio để tránh tràn heap và xung đột
+//          audio_play.stopSong();
          
-         LLM_Feedback = OpenAI_Groq_LLM( sysGetUncomfortableString() + sysGetSensorsString(), OPENAI_KEY, false, GROQ_KEY );
-         if (LLM_Feedback != "")                              
-         {    
-            int id;  String names, model, voice, vspeed, instruction, welcome;                  
-            get_tts_param( &id, &names, &model, &voice, &vspeed, &instruction, &welcome );      
-            Serial.println( " [" + names + "]" + " [" + LLM_Feedback + "]" );  
+//          LLM_Feedback = OpenAI_Groq_LLM( sysGetUncomfortableString() + sysGetSensorsString(), OPENAI_KEY, false, GROQ_KEY );
+//          if (LLM_Feedback != "")                              
+//          {    
+//             int id;  String names, model, voice, vspeed, instruction, welcome;                  
+//             get_tts_param( &id, &names, &model, &voice, &vspeed, &instruction, &welcome );      
+//             Serial.println( " [" + names + "]" + " [" + LLM_Feedback + "]" );  
           
-            LLM_Feedback_before = LLM_Feedback;        
+//             LLM_Feedback_before = LLM_Feedback;        
 
-            Serial.println("OPENAI TTS Pending...");
-            TextToSpeech( LLM_Feedback );
-         }         
-      }
+//             Serial.println("OPENAI TTS Pending...");
+//             TextToSpeech( LLM_Feedback );
+//          }         
+//       }
       
-      // Reset timer
-      KIEM_TRA_CAY_XANH_LAST_CHECKED = millis();
-    }  
-  else 
-    { /*Màn hình chờ*/ }
+//       // Reset timer
+//       KIEM_TRA_CAY_XANH_LAST_CHECKED = millis();
+//     }  
+//   else if (millis() - CAM_BIEN_LAST_CHECKED >= CAM_BIEN_INTERVAL)
+//    { /*Màn hình chờ*/
+//      sysReadSensors();
+//      scrShowStatus();
+//      CAM_BIEN_LAST_CHECKED = millis();
+//    }
+//    else { /* Do nothing */}
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------

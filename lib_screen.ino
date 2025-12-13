@@ -15,8 +15,8 @@ void scrInit() {
 }
 
 void scrDrawIcon(const uint8_t x, const uint8_t y, const uint8_t w, const uint8_t h, const uint8_t* icon, const uint16_t color) {
-  tft.setForegroundColor(color);
-  tft.drawXBMP(x, y, w, h, icon);
+  // tft.setForegroundColor(color);
+  // tft.drawXBMP(x, y, w, h, icon);
 }
 
 void scrDrawMessage(const uint8_t x, const uint8_t y, const char* msg, bool doNotClearAfterDisplayEnds, bool repeatMessageOnLoop)

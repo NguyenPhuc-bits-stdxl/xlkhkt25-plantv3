@@ -1,4 +1,5 @@
 void wmSaveConfigCallback() {
+  scrClear();
   scrDrawMessage(MSG_START_X, MSG_START_Y, wmsSaveRequest, true, true);
   wmShouldSaveConfig = true;
 }
@@ -7,10 +8,12 @@ void wmSaveCreds(String newSsid, String newPwd) {
   prefs.putString("ssid", newSsid);
   prefs.putString("pwd", newPwd);
 
+  scrClear();
   scrDrawMessage(MSG_START_X, MSG_START_Y, wmsSaveSuccess, true, true);
 }
 
 void wmReadCreds() {
+  scrClear();
   scrDrawMessage(MSG_START_X, MSG_START_Y, wmsReading, true, true);
 
   wmSsid = prefs.getString("ssid", "");
@@ -20,6 +23,7 @@ void wmReadCreds() {
 }
 
 void wmConfig() {
+  scrClear();
   scrDrawMessage(MSG_START_X, MSG_START_Y, wmsPleaseConfig, true, true);
 
   wm.startConfigPortal(wmBroadcast);
@@ -33,6 +37,7 @@ void wmConnect() {
   wmReadCreds();
   wm.autoConnect(wmSsid.c_str(), wmPwd.c_str());
   
+  scrClear();
   scrDrawMessage(MSG_START_X, MSG_START_Y, wmsEstablished, true, true);
 }
 

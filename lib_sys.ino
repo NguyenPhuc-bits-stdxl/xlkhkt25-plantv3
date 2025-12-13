@@ -67,14 +67,14 @@ void sysReadSensors() {
 String sysGetDateTimeString() {
   struct tm timeinfo;
   if (!getLocalTime(&timeinfo)) {
-    return String("00/00/0000 00:00:00");
+    return String("lỗi không đọc được thời gian");
   }
 
-  char buffer[25];
+  char buffer[256];
   snprintf(
     buffer,
     sizeof(buffer),
-    "%02d/%02d/%04d %02d:%02d:%02d",
+    "ngày %02d tháng %02d năm %04d, %02d giờ %02d phút %02d giây",
     timeinfo.tm_mday,
     timeinfo.tm_mon + 1,
     timeinfo.tm_year + 1900,
@@ -91,19 +91,17 @@ String sysGetSensorsString() {
 
   char buf[1024];
   snprintf(buf, sizeof(buf),
-    "Bạn là một cây xanh đang trò chuyện với một người bạn thân."
-    " Nếu bạn cảm thấy khó chịu, bạn có thể nói với họ khi các chỉ số này không ổn."
     " Nhiệt độ (từ 40 độ trở lên thì khá là khó chịu): %d độ C."
-    " Độ ẩm (dưới 40% khá là khát nước): %d%%."
+    " Độ ẩm (dưới 40 phần trăm khá là khát nước): %d phần trăm."
     " Ánh sáng (theo thang từ 0-4096, số càng lớn nghĩa là càng tối): %d."
     " Bạn đang ở %s, thời gian hiện tại theo UTC là %s.",
-    (int)ssTemperature, (int)ssHumidity, ssLightAo, WEB_SEARCH_USER_CITY, sysGetDateTimeString()
+    (int)ssTemperature, (int)ssHumidity, ssLightAo, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str()
   );
   return String(buf);
 }
 
 String sysGetUncomfortableString() {
-  return String("[SYS] NOVA à! Đây là yêu cầu từ HỆ THỐNG. Hiện tại hệ thống đã phát hiện được các chỉ số thất thường, bạn hãy báo cáo với bạn thân của bạn và yêu cầu họ giúp đỡ bạn NGAY LẬP TỨC. Dưới đây là bản tóm tắt chỉ số của bạn")
+  return String("[SYS] Nova, hệ thống phát hiện chỉ số bất thường. Hãy báo ngay cho bạn thân và yêu cầu hỗ trợ khẩn cấp. Tóm tắt chỉ số: ")
     + sysGetSensorsString();
 }
 
@@ -114,10 +112,10 @@ bool sysIsUncomfortable() {
   // if (ssTemperature > 40.0f) return true;
 
   // struct tm timeinfo;
-  // int h = timeinfo.tm_hour;
+  // int h = timeinfo.tm_hour + 7; // (lệch 7h do utc+7)
   // // 06:00 đến 14:00 trời tối => kêu than tối quá
   // // note 3800 là giá trị ngẫu nhiên để test, chưa calibrate nên chưa rõ
-  // if ((h >= 13) && (h <= 21) && (ssLight > 3800)) { // (lệch 7h do utc+7)
+  // if ((h >= 6) && (h <= 14) && (ssLight > 3800)) { 
   //   return true;
   // }
   // return false;
