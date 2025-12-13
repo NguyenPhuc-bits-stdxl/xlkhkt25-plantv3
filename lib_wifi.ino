@@ -1,5 +1,5 @@
 void wmSaveConfigCallback() {
-  //scrShowMessage(wmsSaveRequest);
+  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsSaveRequest, true, true);
   wmShouldSaveConfig = true;
 }
 
@@ -7,11 +7,12 @@ void wmSaveCreds(String newSsid, String newPwd) {
   prefs.putString("ssid", newSsid);
   prefs.putString("pwd", newPwd);
 
-  scrShowMessage(wmsSaveSuccess);
+  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsSaveSuccess, true, true);
 }
 
 void wmReadCreds() {
-  scrShowMessage(wmsReading);
+  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsReading, true, true);
+
   wmSsid = prefs.getString("ssid", "");
   wmPwd = prefs.getString("pwd", "");
   
@@ -19,9 +20,9 @@ void wmReadCreds() {
 }
 
 void wmConfig() {
-  wm.startConfigPortal(wmBroadcast);
-  scrShowMessage(wmsPleaseConfig);
+  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsPleaseConfig, true, true);
 
+  wm.startConfigPortal(wmBroadcast);
   if (wmShouldSaveConfig) {
     wmSaveCreds(wm.getWiFiSSID(), wm.getWiFiPass());
     ESP.restart();
@@ -32,7 +33,7 @@ void wmConnect() {
   wmReadCreds();
   wm.autoConnect(wmSsid.c_str(), wmPwd.c_str());
   
-  scrShowMessage(wmsEstablished);
+  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsEstablished, true, true);
 }
 
 void wmInit() {

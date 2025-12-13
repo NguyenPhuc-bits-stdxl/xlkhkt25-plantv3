@@ -6,6 +6,7 @@
 #include <WiFiClientSecure.h>  // Dependencies: *
 #include <Preferences.h>       // Dependencies: lib_sys, lib_wifi
 #include <DHT.h>               // Dependencies: lib_sys
+#include <time.h>
 
 // Screen libraries
 #include <Adafruit_ST7735.h>
@@ -96,9 +97,14 @@ void sysReset();
 bool sysIsResetPressed();
 void sysReadSensors();
 String sysGetSensorsString();
+bool sysIsUncomfortable();
+String sysGetDateTimeString();
+String sysGetUncomfortableString();
 
 void scrInit();
-void scrShowMessage(const char* msg);
+void scrDrawIcon(const uint8_t x, const uint8_t y, const uint8_t w, const uint8_t h, const uint8_t* icon, const uint16_t color);
+void scrDrawMessage(const uint8_t x, const uint8_t y, const char* msg, bool doNotClearAfterDisplayEnds, bool repeatMessageOnLoop);
+void scrClear();
 void scrShowStatus();
 void scrStartUp();
 
@@ -126,6 +132,16 @@ const char* wmsEstablished = "Kết nối\nthành công!";
 
 #pragma endregion Strings
 
+#define ICO_BRAND_DIMM 32
+#define ICO_ACT_DIMM 24
+#define MSG_START_X 2
+#define MSG_START_Y 36
+#define ICO_START_X 52
+#define ICO_START_Y 2
+
+#define KIEM_TRA_CAY_XANH_INTERVAL 60000 // 60s check 1 lần về việc khó chịu
+long long KIEM_TRA_CAY_XANH_LAST_CHECKED;
+
 void setup() 
 {     
   Serial.begin(115200); 
@@ -148,6 +164,8 @@ void setup()
   audio_play.setVolume( gl_VOL_INIT );  
   Serial.println("SYS I2S Playback initialized!");
   
+  KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() + 300000; // postpone 5p để cho người dùng config hoặc là yên tĩnh lúc đầu
+
   Serial.println("SYS All set! READY!");
 }
 
@@ -232,6 +250,9 @@ void loop()
   // ------ USER REQUEST found -> Call OpenAI_Groq_LLM() ------------------------------------------------------------------------
   if (UserRequest != "" ) 
   { 
+    // Chèn string sensor vào để báo cho cây biết thông số của nó
+    UserRequest = sysGetSensorsString() + UserRequest;
+
     // [bugfix/new]: ensure that all TTS websockets are closed prior open LLM websockets (otherwise LLM connection fails)
     audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP) 
     
@@ -308,9 +329,31 @@ void loop()
     { /*Đang nghe*/ }  
   else if (audio_play.isRunning())
     { /*Đang nói*/ }  
-  else
-    { /*Chờ*/ }  
-    
+  else if (millis() - KIEM_TRA_CAY_XANH_LAST_CHECKED >= KIEM_TRA_CAY_XANH_INTERVAL)
+    { /* Wishlist: Check điều kiện không thoải mái (tạm toggle qua flag UNCOMFORTABLE)*/ 
+      if (sysIsUncomfortable()) {
+         // Dừng STREAM Audio để tránh tràn heap và xung đột
+         audio_play.stopSong();
+         
+         LLM_Feedback = OpenAI_Groq_LLM( sysGetUncomfortableString() + sysGetSensorsString(), OPENAI_KEY, false, GROQ_KEY );
+         if (LLM_Feedback != "")                              
+         {    
+            int id;  String names, model, voice, vspeed, instruction, welcome;                  
+            get_tts_param( &id, &names, &model, &voice, &vspeed, &instruction, &welcome );      
+            Serial.println( " [" + names + "]" + " [" + LLM_Feedback + "]" );  
+          
+            LLM_Feedback_before = LLM_Feedback;        
+
+            Serial.println("OPENAI TTS Pending...");
+            TextToSpeech( LLM_Feedback );
+         }         
+      }
+      
+      // Reset timer
+      KIEM_TRA_CAY_XANH_LAST_CHECKED = millis();
+    }  
+  else 
+    { /*Màn hình chờ*/ }
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
