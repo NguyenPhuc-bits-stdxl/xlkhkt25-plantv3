@@ -1,6 +1,8 @@
 void wmSaveConfigCallback() {
   scrClear();
-  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsSaveRequest, true, true);
+  scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoWifi, ST77XX_RED);
+  scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsSaveRequest);
+
   wmShouldSaveConfig = true;
 }
 
@@ -9,12 +11,14 @@ void wmSaveCreds(String newSsid, String newPwd) {
   prefs.putString("pwd", newPwd);
 
   scrClear();
-  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsSaveSuccess, true, true);
+  scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoSetup, ST77XX_RED);
+  scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsSaveSuccess);
 }
 
 void wmReadCreds() {
   scrClear();
-  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsReading, true, true);
+  scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoWifi, ST77XX_YELLOW);
+  scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsReading);
 
   wmSsid = prefs.getString("ssid", "");
   wmPwd = prefs.getString("pwd", "");
@@ -24,7 +28,9 @@ void wmReadCreds() {
 
 void wmConfig() {
   scrClear();
-  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsPleaseConfig, true, true);
+
+  scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoSetup, ST77XX_BLUE);
+  scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsPleaseConfig);
 
   wm.startConfigPortal(wmBroadcast);
   if (wmShouldSaveConfig) {
@@ -38,7 +44,8 @@ void wmConnect() {
   wm.autoConnect(wmSsid.c_str(), wmPwd.c_str());
   
   scrClear();
-  scrDrawMessage(MSG_START_X, MSG_START_Y, wmsEstablished, true, true);
+  scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoWifi, ST77XX_GREEN);
+  scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsEstablished);
 }
 
 void wmInit() {

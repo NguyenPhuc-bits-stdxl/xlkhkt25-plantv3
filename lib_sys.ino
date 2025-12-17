@@ -34,12 +34,15 @@ void sysInit() {
   // Time
   configTime(0, 0, "pool.ntp.org");
   Serial.println("SYS NTP Time configured");
+
+  // Reset UC
+  sysResetUncomfortableState();
 }
 
 void sysReset() {
   scrClear();
   scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoReplay, ST77XX_BLUE);
-  scrDrawMessage(MSG_START_X, MSG_START_Y, systrReset, true, true);
+  scrDrawMessageFixed(MSG_START_X, MSG_START_Y, systrReset);
 
   wmConfig();
 }
@@ -89,23 +92,20 @@ String sysGetDateTimeString() {
 String sysGetSensorsString() {
   sysReadSensors();
 
-  char buf[1024];
+  char buf[512];
   snprintf(buf, sizeof(buf),
-    " Nhiệt độ (từ 40 độ trở lên thì khá là khó chịu): %d độ C."
-    " Độ ẩm (dưới 40 phần trăm khá là khát nước): %d phần trăm."
-    " Ánh sáng (theo thang từ 0-4096, số càng lớn nghĩa là càng tối): %d."
-    " Bạn đang ở %s, thời gian hiện tại theo UTC là %s.",
+    " [REPORT] Nhiệt độ: %d độ C. Độ ẩm: %d phần trăm. Ánh sáng: %d. Vị trí: %s (GMT+7). Thời gian hiện tại theo UTC: %s. ",
     (int)ssTemperature, (int)ssHumidity, ssLightAo, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str()
   );
   return String(buf);
 }
 
 String sysGetUncomfortableString() {
-  return String("[SYS] Nova, hệ thống phát hiện chỉ số bất thường. Hãy báo ngay cho bạn thân và yêu cầu hỗ trợ khẩn cấp. Tóm tắt chỉ số: ")
-    + sysGetSensorsString();
+  return String(" [SYS] Nova, hệ thống phát hiện chỉ số bất thường. Hãy báo ngay cho bạn thân và yêu cầu hỗ trợ khẩn cấp. ");
 }
 
 bool sysIsUncomfortable() {
+  sysReadSensors();
   // Check các điều kiện...
 
   // if (ssHumidity < 40.0f) return true;
@@ -120,4 +120,29 @@ bool sysIsUncomfortable() {
   // }
   // return false;
   return false;
+}
+
+void sysResetUncomfortableState() {
+  IGNORE_STATUS = false;
+  IGNORE_TIMES = 0;
+}
+
+void sysAccumulateUncomfortableState() {
+  IGNORE_STATUS = true;
+  IGNORE_TIMES++;
+}
+
+bool sysUncomfortableShouldUseAI() {
+  if (!IGNORE_STATUS) return false;
+  if (IGNORE_TIMES <= IGNORE_SERIOUS) return true;
+  return false;
+}
+
+String sysGetUncomfortableStringIgnore() {
+  char buf[196];
+  snprintf(buf, sizeof(buf),
+    "Bạn ơi, giúp mình với. Mình đã nhờ bạn %d lần rồi đấy!",
+    IGNORE_TIMES
+  );
+  return String(buf);
 }

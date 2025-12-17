@@ -1,5 +1,6 @@
 #pragma region Libraries Macros
 
+#include "lib_icon.h"
 #include "driver/i2s_std.h"  
 #include <WiFi.h>
 #include <WiFiManager.h>       // Dependencies: main, lib_audio_recording, lib_audio_transcription, lib_openai_groq_chat, lib_wifi
@@ -23,6 +24,8 @@ bool    DEBUG = true;
 #pragma endregion Libraries Macros
 
 #pragma region Pinout
+
+#define NO_PIN -1
 
 #define pin_I2S_DOUT 16  
 #define pin_I2S_LRC 8   
@@ -100,13 +103,21 @@ String sysGetSensorsString();
 bool sysIsUncomfortable();
 String sysGetDateTimeString();
 String sysGetUncomfortableString();
+void sysResetUncomfortableState();
+void sysAccumulateUncomfortableState();
+bool sysUncomfortableShouldUseAI();
+String sysGetUncomfortableStringIgnore();
 
 void scrInit();
-void scrDrawIcon(const uint8_t x, const uint8_t y, const uint8_t w, const uint8_t h, const uint8_t* icon, const uint16_t color);
-void scrDrawMessage(const uint8_t x, const uint8_t y, const char* msg, bool doNotClearAfterDisplayEnds, bool repeatMessageOnLoop);
+void scrLoop();
 void scrClear();
+void scrDrawIcon(const uint8_t x, const uint8_t y, const uint8_t w, const uint8_t h, const uint8_t* icon, const uint16_t color);
+void scrDrawMessageFixed(const uint8_t x, const uint8_t y, const char* msg);
+void scrDrawMessage(const uint8_t x, const uint8_t y, const char* msg, int repeatTimes);
 void scrShowStatus();
 void scrStartUp();
+void scrPrepareTftPages(const char* msg, uint8_t startY);
+void scrListening();
 
 void wmSaveConfigCallback();
 void wmSaveCreds(String newSsid, String newPwd);
@@ -132,20 +143,59 @@ const char* wmsEstablished = "Kết nối\nthành công!";
 
 #pragma endregion Strings
 
-#define NO_PIN -1
-#define ICO_BRAND_DIMM 32
+#pragma region PageText lib
+
+#define TFT_TIMES_INF 999
+#define MAX_TFT_PAGES 10
+#define PAGE_INTERVAL 3000
+
+String TFT_PAGES[MAX_TFT_PAGES];
+uint8_t TFT_PAGES_LEN = 0;
+
+uint8_t TFT_TEXT_START_Y = 2;
+uint8_t TFT_TEXT_START_X = 2;
+const uint8_t LINE_HEIGHT = 12;
+const uint8_t TEXT_W = 124;
+const uint8_t SCREEN_H = 128;
+
+bool TFT_MESSAGE_AVAILABLE = false;
+int TFT_REPEAT_TIMES_VALUE = 1;
+int TFT_REPEAT_TIMES = 1;
+
+uint8_t TFT_DISPLAY_PAGE = 0;
+unsigned long TFT_DISPLAY_PAGE_SWITCH = 0;
+bool TFT_WAIT_LAST_PAGE = false;
+
+#pragma endregion PageText lib
+
 #define ICO_ACT_DIMM 24
-#define MSG_START_X 2
-#define MSG_START_Y 36
 #define ICO_START_X 52
 #define ICO_START_Y 2
+#define MSG_START_X 2
+#define MSG_START_Y 30
 
 #define KIEM_TRA_CAY_XANH_INTERVAL 60000 // 60s check 1 lần về việc khó chịu
 long long KIEM_TRA_CAY_XANH_LAST_CHECKED;
-#define CAM_BIEN_INTERVAL 5000 // 5s update màn hình chờ (thông số cảm biến)
+#define CAM_BIEN_INTERVAL 3000 // 3s update màn hình chờ (thông số cảm biến)
 long long CAM_BIEN_LAST_CHECKED;
 
 String gl_voice_instruct;        // internally used for forced 'voice character' (via command "VOICE", erased on friend changes)
+
+long long SYS_START;
+bool startupSoundPlayed = false;
+bool startupSoundStopped = false;
+bool dbgUncomfToggled = false;
+
+bool scrxSpeaking = false;
+bool scrxListening = false;
+
+// Nếu như sau 5 lần xin trợ giúp mà không có gì?
+// >> Gửi mail + hiển thị thông báo màn hình + kêu ting mỗi phút
+//    (không call ChatGPT vì sẽ tốn API không cần thiết)
+int IGNORE_TIMES = 0;
+bool IGNORE_STATUS = false;   // đánh dấu việc cây cần trợ giúp từ lần tương tác gần nhất
+                              // vì có thể lần 1 check Có, lần 2 check không có, 3 check không có..., rải rác có/không => đánh dấu lại
+#define IGNORE_SERIOUS 2
 
 void setup() 
 {     
@@ -169,14 +219,32 @@ void setup()
   audio_play.setVolume( gl_VOL_INIT );  
   Serial.println("SYS I2S Playback initialized!");
   
-  KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() + 300000; // postpone 5p để cho người dùng config hoặc là yên tĩnh lúc đầu
+  KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() + 60000; // postpone 5p để cho người dùng config hoặc là yên tĩnh lúc đầu
   CAM_BIEN_LAST_CHECKED = millis() + 10000; // hoãn 10s
 
+  startupSoundPlayed = false;
+  startupSoundStopped = false;
+  TFT_MESSAGE_AVAILABLE = false;
   Serial.println("SYS All set! READY!");
 }
 
 void loop() 
-{
+{   
+   // bugfix 14/12: thêm Startup Sound để đệm trước Audio.h,
+   // tránh crash panic'ed khi gọi LLM-TTS ngay ban đầu
+  if (!startupSoundPlayed) {
+   Serial.println("SYS AUDIO Playing startup sound...");
+   audio_play.connecttohost( "https://github.com/NguyenPhuc-bits-stdxl/xlkhkt25-plantv3/raw/refs/heads/main/audio/StartupSound.mp3" ); 
+   startupSoundPlayed = true;
+   SYS_START = millis();
+  }
+  if (!startupSoundStopped) {
+   if (millis() - SYS_START >= 8000) {
+      audio_play.stopSong();
+      startupSoundStopped = true;
+   }
+  }
+
   String UserRequest;                   // user request, initialized new each loop pass 
   String LLM_Feedback;                  // LLM AI response
   static String LLM_Feedback_before;    // static var to keep information from last request (as alternative to global var)
@@ -205,7 +273,10 @@ void loop()
   // 3 different BTN actions:  PRESS & HOLD for recording || STOP (Interrupt) LLM AI speaking || REPEAT last LLM AI answer  
   bool flg_RECORD_BTN = digitalRead(pin_RECORD_BTN);       
   if ( flg_RECORD_BTN == LOW ) {
-     delay(30);                                                   // unbouncing & suppressing finger button 'click' noise 
+     delay(30);                                                   // unbouncing & suppressing finger button 'click' noise
+     scrListening();
+     sysResetUncomfortableState(); // miễn là có tương tác người dùng, reset trạng thái khó chịu
+
      if (audio_play.isRunning())                                  // Before we start any recording: always stop earlier Audio 
      {  audio_play.stopSong();                                    // [bug fix]: previous audio_play.connecttohost() won't work
         Serial.println( "\n< STOP AUDIO >" );
@@ -226,7 +297,11 @@ void loop()
            UserRequest = SpeechToText_ElevenLabs( record_SDfile, record_buffer, record_bytes, "", ELEVENLABS_KEY );
            Serial.println( "[" + UserRequest + "]" );            
            
-           Serial.println("ELEVENLABS Transcript was successful.");           
+           Serial.println("ELEVENLABS Transcript was successful.");      
+
+           scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoSmile, ST77XX_BLACK);
+           scrPrepareTftPages(UserRequest.c_str(), MSG_START_Y);
+           scrDrawMessageFixed(MSG_START_X, MSG_START_Y, TFT_PAGES[0].c_str());
         }
         else                                                      // 2 additional Actions on short button PRESS (< 0.4 secs):
         { if (!flg_UserStoppedAudio)                              // - STOP AUDIO when playing (done above, if Btn == LOW)
@@ -246,20 +321,30 @@ void loop()
   cmd.toUpperCase();
   cmd.replace(".", "");
 
-  // RADIO
-  if (cmd.indexOf("RADIO") >=0 )
-  {  Serial.println( "< Streaming German RADIO: SWR3 >" );  
-     audio_play.connecttohost( "https://liveradio.swr.de/sw282p3/swr3/play.mp3" ); 
+//   // RADIO
+//   if (cmd.indexOf("RADIO") >=0 )
+//   {  Serial.println( "< Streaming German RADIO: SWR3 >" );  
+//      audio_play.connecttohost( "https://liveradio.swr.de/sw282p3/swr3/play.mp3" ); 
+//      UserRequest = "";
+//   } 
+  
+  // DBG: ZXCVUNCF
+  if (cmd.indexOf("ZXCVUNCF") >=0 )
+  {  Serial.println( "< UNCOMF flag TOGGLED. WAIT... >" );  
+     dbgUncomfToggled = true;
+     KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() - 99999;
+
      UserRequest = "";
   } 
 
   // ------ USER REQUEST found -> Call OpenAI_Groq_LLM() ------------------------------------------------------------------------
   if (UserRequest != "" ) 
   { 
-    // Chèn string sensor vào để báo cho cây biết thông số của nó
-    UserRequest = sysGetSensorsString() + String("Lời nhắn từ người bạn thân: ") + UserRequest;
+    // Chèn string sensor vào để báo cho cây biết thông số của nó, kèm SYS nếu khó chịu
+    // [USER] [REPORT] ?[SYS]
+    UserRequest = UserRequest + sysGetSensorsString() + (sysIsUncomfortable() ? sysGetUncomfortableString() : "");
     
-    Serial.println("full prompt > [" + UserRequest + "]");
+    Serial.println("Full prompt > [" + UserRequest + "]");
 
     // [bugfix/new]: ensure that all TTS websockets are closed prior open LLM websockets (otherwise LLM connection fails)
     audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP) 
@@ -309,6 +394,9 @@ void loop()
   {  
      Serial.println("OPENAI TTS Pending...");
      TextToSpeech( LLM_Feedback );         
+     
+     scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoSpeaking, ST77XX_BLACK);
+     scrDrawMessage(MSG_START_X, MSG_START_Y, LLM_Feedback.c_str(), 8);
   }
    
   // ------ Điều chỉnh âm lượng -------------------------------------------------------------------------------------------------    
@@ -316,11 +404,19 @@ void loop()
   {  static bool flg_volume_updated = false; 
      static int volume_level = -1; 
      if (digitalRead(pin_VOL_BTN) == LOW && !flg_volume_updated)          
-     {  int steps = sizeof(gl_VOL_STEPS) / sizeof(gl_VOL_STEPS[0]);
+     {
+        int steps = sizeof(gl_VOL_STEPS) / sizeof(gl_VOL_STEPS[0]);
         volume_level = ((volume_level+1) % steps);  
         Serial.println( "New Audio Volume: [" + (String) volume_level + "] = " + (String) gl_VOL_STEPS[volume_level] );
+
+        scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoVol, ST77XX_BLACK);
+        if (volume_level == 0) scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoVolMute, ST77XX_BLACK);
+        scrDrawMessageFixed(MSG_START_X, MSG_START_Y, (String("Âm lượng \n") + volume_level*10 + "%").c_str());
+
         flg_volume_updated = true;
         audio_play.setVolume( gl_VOL_STEPS[volume_level] );  
+
+        sysResetCounters(); // thêm vào 17/12
     }
     if (digitalRead(pin_VOL_BTN) == HIGH && flg_volume_updated)         
     {  flg_volume_updated = false;    
@@ -332,40 +428,80 @@ void loop()
   audio_play.loop();  
   vTaskDelay(1); 
 
-//   if (flg_RECORD_BTN==LOW)
-//     { /*Đang nghe*/ }  
-//   else if (audio_play.isRunning())
-//     { /*Đang nói*/ }  
-//   else if (millis() - KIEM_TRA_CAY_XANH_LAST_CHECKED >= KIEM_TRA_CAY_XANH_INTERVAL)
-//     { /* Wishlist: Check điều kiện không thoải mái (tạm toggle qua flag UNCOMFORTABLE)*/ 
-//       if (sysIsUncomfortable()) {
-//          // Dừng STREAM Audio để tránh tràn heap và xung đột
-//          audio_play.stopSong();
-         
-//          LLM_Feedback = OpenAI_Groq_LLM( sysGetUncomfortableString() + sysGetSensorsString(), OPENAI_KEY, false, GROQ_KEY );
-//          if (LLM_Feedback != "")                              
-//          {    
-//             int id;  String names, model, voice, vspeed, instruction, welcome;                  
-//             get_tts_param( &id, &names, &model, &voice, &vspeed, &instruction, &welcome );      
-//             Serial.println( " [" + names + "]" + " [" + LLM_Feedback + "]" );  
-          
-//             LLM_Feedback_before = LLM_Feedback;        
+  // Loop ST7735
+  scrLoop();
 
-//             Serial.println("OPENAI TTS Pending...");
-//             TextToSpeech( LLM_Feedback );
-//          }         
-//       }
+  if (flg_RECORD_BTN==LOW)
+    { scrListening(); }  
+  else if (audio_play.isRunning())
+    { /*Đang nói*/ }  
+  else if (millis() - KIEM_TRA_CAY_XANH_LAST_CHECKED >= KIEM_TRA_CAY_XANH_INTERVAL)
+    { 
+      // Check điều kiện không thoải mái (tạm toggle qua flag ZXCVUNCF)
+      if (dbgUncomfToggled || sysIsUncomfortable()) {
+
+         // DBG: de-flag để tránh rơi vào loop lần sau
+         dbgUncomfToggled = false;
+
+         // Cộng dồn trạng thái khó chịu
+         sysAccumulateUncomfortableState();
+
+         // Dừng STREAM Audio để tránh tràn heap và xung đột
+         audio_play.stopSong();
+         
+         // Có nên dùng AI không?
+         // Nếu IGNORE_TIMES <= 5: được, lớn hơn thì KHÔNG
+         if (sysUncomfortableShouldUseAI()) {
+            // Gửi [SYS] và [REPORT]
+            Serial.print("SYS UC > ");
+            LLM_Feedback = OpenAI_Groq_LLM( sysGetUncomfortableString() + sysGetSensorsString(), OPENAI_KEY, false, GROQ_KEY );
+            if (LLM_Feedback != "") 
+            {    
+               int id;  String names, model, voice, vspeed, instruction, welcome;                  
+               get_tts_param( &id, &names, &model, &voice, &vspeed, &instruction, &welcome );      
+               Serial.println( "[" + names + "]" + " [" + LLM_Feedback + "]" );  
+            
+               LLM_Feedback_before = LLM_Feedback;        
+               
+               scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoStressed, ST77XX_BLACK);
+               scrDrawMessage(MSG_START_X, MSG_START_Y, LLM_Feedback.c_str(), 10);
+
+               Serial.println("SYS UC TTS Pending...");
+               TextToSpeech( LLM_Feedback );
+            }         
+         }
+         else {
+            Serial.println("SYS UC NO AI");
+            scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoStressed, ST77XX_RED);
+            scrPrepareTftPages(sysGetUncomfortableStringIgnore().c_str(), MSG_START_Y);
+           scrDrawMessageFixed(MSG_START_X, MSG_START_Y, TFT_PAGES[0].c_str());
+         }
+
+         // Send Email
+         // code goes here
+         // ...
+      }
       
-//       // Reset timer
-//       KIEM_TRA_CAY_XANH_LAST_CHECKED = millis();
-//     }  
-//   else if (millis() - CAM_BIEN_LAST_CHECKED >= CAM_BIEN_INTERVAL)
-//    { /*Màn hình chờ*/
-//      sysReadSensors();
-//      scrShowStatus();
-//      CAM_BIEN_LAST_CHECKED = millis();
-//    }
-//    else { /* Do nothing */}
+      // Reset timer (cả màn hình chờ và khó chịu)
+      // KIEM_TRA_CAY_XANH_LAST_CHECKED = millis();
+      sysResetCounters();
+    }  
+  else if ((millis() - CAM_BIEN_LAST_CHECKED >= CAM_BIEN_INTERVAL)
+            && ((!IGNORE_STATUS) || (IGNORE_TIMES <= IGNORE_SERIOUS))) {
+     /* Màn hình chờ
+        Kiểm tra coi có từ chối 5 lần chưa, rồi thì hiện thông báo khẩn cấp và để đó, không hiện màn hình chờ */     
+     sysReadSensors();
+     scrShowStatus();
+     CAM_BIEN_LAST_CHECKED = millis();
+   }
+   else { TFT_MESSAGE_AVAILABLE = false; }
+}
+
+long long tmpMillisValue;
+void sysResetCounters() {
+   tmpMillisValue = millis();
+   CAM_BIEN_LAST_CHECKED = tmpMillisValue;
+   KIEM_TRA_CAY_XANH_LAST_CHECKED = tmpMillisValue;
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------
