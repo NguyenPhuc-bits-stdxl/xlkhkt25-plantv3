@@ -103,13 +103,25 @@ void scrShowStatus() {
 
   // Ánh sáng, nhiệt, ẩm, trạng thái
   display.drawXBitmap(20, 8, epd_bitmap_icosLight0, 24, 24, ST77XX_YELLOW);
-  if (ssLightAo >= 3800) display.drawXBitmap(20, 8, epd_bitmap_icosLight1, 24, 24, ST77XX_BLACK);
+  if (ssLightAo >= 3800) 
+  {
+    display.fillRect(0, 0, 63, 63, ST77XX_WHITE);
+    display.drawXBitmap(20, 8, epd_bitmap_icosLight1, 24, 24, ST77XX_BLACK);
+  }
 
   display.drawXBitmap(84, 8, epd_bitmap_icosTemp, 24, 24, ST77XX_RED);
   display.drawXBitmap(20, 72, epd_bitmap_icosHumid, 24, 24, ST77XX_BLUE);
   
   display.drawXBitmap(84, 72, epd_bitmap_icoSmile, 24, 24, ST77XX_GREEN);
-  if (IGNORE_STATUS) display.drawXBitmap(84, 72, epd_bitmap_icoSad, 24, 24, ST77XX_ORANGE);
+  tft.setCursor(68, 116);
+  tft.print("Vui vẻ");
+
+  if (IGNORE_STATUS) 
+  { display.fillRect(65, 65, 128, 128, ST77XX_WHITE);
+    display.drawXBitmap(84, 72, epd_bitmap_icoSad, 24, 24, ST77XX_ORANGE);
+    tft.setCursor(68, 116);
+    tft.print("Giúp!");
+  }
 
   tft.setCursor(4, 52);
   tft.print(ssLightAo);
@@ -117,11 +129,6 @@ void scrShowStatus() {
   tft.print(ssHumidity);
   tft.setCursor(68, 52);
   tft.print(ssTemperature);
-
-  tft.setCursor(68, 116);
-  tft.print("Vui vẻ");
-  tft.setCursor(68, 116);
-  if (IGNORE_STATUS) tft.print("Giúp!");
 }
 
 void scrListening() {

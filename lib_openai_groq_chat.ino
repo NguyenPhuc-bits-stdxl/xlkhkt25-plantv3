@@ -1,5 +1,4 @@
 #define  ENABLE_DEBUG
-#define WEB_SEARCH_USER_CITY     "Đồng Nai, Vietnam" // optional (recommended): User location optimizes OpenAI 'web search'
 #define TIMEOUT_LLM  10          // preferred max. waiting time [sec] for LMM AI response     
 
 int gl_CURR_FRIEND = 0;      

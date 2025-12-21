@@ -37,6 +37,9 @@ void sysInit() {
 
   // Reset UC
   sysResetUncomfortableState();
+
+  // Email
+  emlInit();
 }
 
 void sysReset() {
@@ -90,8 +93,6 @@ String sysGetDateTimeString() {
 }
 
 String sysGetSensorsString() {
-  sysReadSensors();
-
   char buf[512];
   snprintf(buf, sizeof(buf),
     " [REPORT] Nhiệt độ: %d độ C. Độ ẩm: %d phần trăm. Ánh sáng: %d. Vị trí: %s (GMT+7). Thời gian hiện tại theo UTC: %s. ",
@@ -105,8 +106,8 @@ String sysGetUncomfortableString() {
 }
 
 bool sysIsUncomfortable() {
-  sysReadSensors();
   // Check các điều kiện...
+  // ReadSensors đã chạy từ trước
 
   // if (ssHumidity < 40.0f) return true;
   // if (ssTemperature > 40.0f) return true;

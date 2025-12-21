@@ -1,5 +1,6 @@
 #pragma region Libraries Macros
 
+#include <Arduino.h>
 #include "lib_icon.h"
 #include "driver/i2s_std.h"  
 #include <WiFi.h>
@@ -128,6 +129,12 @@ void wmInit();
 
 void sysFetchCreds();
 
+void emlInit();
+void emlStart();
+void emlBodyUncomfortable(String smsg, int slight, float stemp, float shumid, int signore, String swhere, String stime);
+void emlBodyConversation(String slog, String swhere, String stime);
+void emlFinalize();
+
 #pragma endregion Prototypes
 
 #pragma region Strings
@@ -168,6 +175,10 @@ bool TFT_WAIT_LAST_PAGE = false;
 
 #pragma endregion PageText lib
 
+#pragma region Sysconfig
+
+#define WEB_SEARCH_USER_CITY     "Đồng Nai, Vietnam" // optional (recommended): User location optimizes OpenAI 'web search'
+
 #define ICO_ACT_DIMM 24
 #define ICO_START_X 52
 #define ICO_START_Y 2
@@ -196,6 +207,60 @@ int IGNORE_TIMES = 0;
 bool IGNORE_STATUS = false;   // đánh dấu việc cây cần trợ giúp từ lần tương tác gần nhất
                               // vì có thể lần 1 check Có, lần 2 check không có, 3 check không có..., rải rác có/không => đánh dấu lại
 #define IGNORE_SERIOUS 2
+
+#pragma endregion 
+
+#pragma region Email
+
+#include <Arduino.h>
+#include "Networks.h"
+
+#define ENABLE_SMTP  // Allows SMTP class and data
+#define ENABLE_DEBUG // Allows debugging
+#define READYMAIL_DEBUG_PORT Serial
+
+// If message timestamp and/or Date header was not set,
+// the message timestamp will be taken from this source, otherwise
+// the default timestamp will be used.
+#if defined(ESP32) || defined(ESP8266)
+#define READYMAIL_TIME_SOURCE time(nullptr); // Or using WiFi.getTime() in WiFiNINA and WiFi101 firmwares.
+#endif
+
+#include <ReadyMail.h>
+
+#define SMTP_HOST "smtp.gmail.com"
+#define SMTP_PORT 465 // SSL or 587 for STARTTLS
+
+// Vì lý do an toàn, thông tin này sẽ được gửi riêng, check Zalo, không xem GitHub
+String AUTHOR_EMAIL = "";
+String AUTHOR_PASSWORD = "";
+String RECIPIENT_EMAIL = "";
+
+#define SSL_MODE true
+#define AUTHENTICATION true
+#define NOTIFY "SUCCESS,FAILURE,DELAY" // Delivery Status Notification (if SMTP server supports this DSN extension)
+#define PRIORITY "Normal"                // High, Normal, Low
+#define PRIORITY_NUM "1"               // 1 = high, 3, 5 = low
+#define EMBED_MESSAGE false            // To send the html or text content as attachment
+
+WiFiClientSecure ssl_client;
+SMTPClient smtp(ssl_client);
+
+SMTPMessage msg;
+String bodyText;
+String bodyHtml;
+
+// For more information, see http://bit.ly/474niML
+void smtpCb(SMTPStatus status)
+{
+    if (status.progress.available)
+        ReadyMail.printf("ReadyMail[smtp][%d] Uploading file %s, %d %% completed\n", status.state,
+                         status.progress.filename.c_str(), status.progress.value);
+    else
+        ReadyMail.printf("ReadyMail[smtp][%d]%s\n", status.state, status.text.c_str());
+}
+
+#pragma endregion Email
 
 void setup() 
 {     
@@ -227,6 +292,7 @@ void setup()
   TFT_MESSAGE_AVAILABLE = false;
   Serial.println("SYS All set! READY!");
 }
+
 
 void loop() 
 {   
@@ -330,9 +396,21 @@ void loop()
   
   // DBG: ZXCVUNCF
   if (cmd.indexOf("ZXCVUNCF") >=0 )
-  {  Serial.println( "< UNCOMF flag TOGGLED. WAIT... >" );  
+  {  Serial.println( "< UNCOMF flag TOGGLED. WAIT... >" );
+     sysReadSensors();
      dbgUncomfToggled = true;
      KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() - 99999;
+
+     UserRequest = "";
+  } 
+
+  // DBG: @!
+  if (cmd.indexOf("@!") >=0 )
+  {  Serial.println( "< SENDING CHAT HISTORY. WAIT... >" );
+     sysReadSensors();
+     emlStart();
+     emlBodyConversation();
+     emlFinalize();
 
      UserRequest = "";
   } 
@@ -342,6 +420,7 @@ void loop()
   { 
     // Chèn string sensor vào để báo cho cây biết thông số của nó, kèm SYS nếu khó chịu
     // [USER] [REPORT] ?[SYS]
+    sysReadSensors(); // lấy số liệu mới
     UserRequest = UserRequest + sysGetSensorsString() + (sysIsUncomfortable() ? sysGetUncomfortableString() : "");
     
     Serial.println("Full prompt > [" + UserRequest + "]");
@@ -437,6 +516,8 @@ void loop()
     { /*Đang nói*/ }  
   else if (millis() - KIEM_TRA_CAY_XANH_LAST_CHECKED >= KIEM_TRA_CAY_XANH_INTERVAL)
     { 
+      sysReadSensors(); // lấy số liệu mới
+
       // Check điều kiện không thoải mái (tạm toggle qua flag ZXCVUNCF)
       if (dbgUncomfToggled || sysIsUncomfortable()) {
 
@@ -448,7 +529,7 @@ void loop()
 
          // Dừng STREAM Audio để tránh tràn heap và xung đột
          audio_play.stopSong();
-         
+
          // Có nên dùng AI không?
          // Nếu IGNORE_TIMES <= 5: được, lớn hơn thì KHÔNG
          if (sysUncomfortableShouldUseAI()) {
@@ -478,8 +559,9 @@ void loop()
          }
 
          // Send Email
-         // code goes here
-         // ...
+         emlStart();
+         emlBodyUncomfortable(LLM_Feedback, ssLightAo, ssTemperature, ssHumidity, IGNORE_TIMES, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str());
+         emlFinalize();
       }
       
       // Reset timer (cả màn hình chờ và khó chịu)
