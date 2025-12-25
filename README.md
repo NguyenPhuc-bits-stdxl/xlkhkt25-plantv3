@@ -1,5 +1,5 @@
-# xlkhkt25-plantv3
-Chậu cây thông minh phiên bản 3
+# Giới thiệu
+Chậu cây thông minh phiên bản 3 (Sản phẩm dự thi giai đoạn tái cấu trúc lần thứ 2)
 
 # Big thanks to kaloprojects
 Chân thành cảm ơn đến tác giả kaloprojects đã truyền cảm hứng cho dự án Cây xanh AI Nova của nhóm chúng em!
