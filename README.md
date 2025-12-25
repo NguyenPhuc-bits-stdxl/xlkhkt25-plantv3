@@ -1,10 +1,13 @@
 # xlkhkt25-plantv3
 Chậu cây thông minh phiên bản 3
 
-Google Docs documentation [here](https://docs.google.com/document/d/1plYU-8LHdzI_1yI13td3qCeDksVRaw9wgZwrKLIwX0k/edit?usp=sharing)
+# Big thanks to kaloprojects
+Chân thành cảm ơn đến tác giả kaloprojects đã truyền cảm hứng cho dự án Cây xanh AI Nova của nhóm chúng em!
+Bạn, người xem repo này, có thể muốn xem thử repo của tác giả kaloprojects qua link ở dưới.
 
-# Original repo
-[kaloproject's project](https://github.com/kaloprojects/KALO-ESP32-Voice-Chat-AI-Friends/tree/main/KALO_ESP32_Voice_Chat_AI_Friends)
+Thank you for inspiring our ESP32 AI Plant Friend (Nova Plant) project!
+You, the viewer, may wanna have a check of his repository at the link down below.
+[kaloprojects' project](https://github.com/kaloprojects/KALO-ESP32-Voice-Chat-AI-Friends/tree/main/KALO_ESP32_Voice_Chat_AI_Friends)
 
 ## Changes made:
 - SD card functionality removed
@@ -13,6 +16,7 @@ Google Docs documentation [here](https://docs.google.com/document/d/1plYU-8LHdzI
 - Display added (ST7735 + U8g2 for AdaGFX)
 - Reset buton is introduced
 - Added functionality to configure WiFi by sending RESET command at startup
+- Added the ability to sense uncomfortable conditions and ask for help if needed
 
 # Dependencies
 ## Via Boards Manager
