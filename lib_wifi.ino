@@ -6,10 +6,12 @@ void wmSaveConfigCallback() {
   wmShouldSaveConfig = true;
 }
 
-void wmSaveCreds(String newSsid, String newPwd) {
+void wmSaveCreds(String newSsid, String newPwd, String wmstEmail, String wmstPlantName) {
   prefs.putString("ssid", newSsid);
   prefs.putString("pwd", newPwd);
-
+  prefs.putString("wmstEmail", wmstEmail);
+  prefs.putString("wmstPlantName", wmstPlantName);
+  
   scrClear();
   scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoSetup, ST77XX_RED);
   scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsSaveSuccess);
@@ -31,10 +33,16 @@ void wmConfig() {
 
   scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoSetup, ST77XX_BLUE);
   scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsPleaseConfig);
+  
+  WiFiManagerParameter emailField("email", "Địa chỉ nhận email thông báo? (tùy chọn)", "", 128);
+  wm.addParameter(&emailField);
 
+  WiFiManagerParameter plnameField("plant name", "Cây bạn đang trồng là cây gì? (tùy chọn)", "", 128);
+  wm.addParameter(&plnameField);
+  
   wm.startConfigPortal(wmBroadcast);
   if (wmShouldSaveConfig) {
-    wmSaveCreds(wm.getWiFiSSID(), wm.getWiFiPass());
+    wmSaveCreds(wm.getWiFiSSID(), wm.getWiFiPass(), emailField.getValue(), plnameField.getValue());
     ESP.restart();
   }
 }

@@ -15,6 +15,15 @@ void sysInit() {
 
   // Prefs
   prefs.begin("config", false);
+
+  // Load Prefs config
+  RECIPIENT_EMAIL = prefs.getString("wmstEmail", "");
+  
+  PLANT_NAME = prefs.getString("wmstPlantName", "cây xanh bình thường");
+  if (PLANT_NAME == "") {
+    PLANT_NAME = "cây xanh bình thường";
+  }
+
   Serial.println("SYS Prefs initialized");
 
   // WiFiManager
@@ -109,17 +118,17 @@ bool sysIsUncomfortable() {
   // Check các điều kiện...
   // ReadSensors đã chạy từ trước
 
-  // if (ssHumidity < 40.0f) return true;
-  // if (ssTemperature > 40.0f) return true;
+  if (ssHumidity < 60.0f) return true;
+  if (ssHumidity > 90.0f) return true;
+  if (ssTemperature < 10.0f) return true;
+  if (ssTemperature > 40.0f) return true;
 
-  // struct tm timeinfo;
-  // int h = timeinfo.tm_hour + 7; // (lệch 7h do utc+7)
-  // // 06:00 đến 14:00 trời tối => kêu than tối quá
-  // // note 3800 là giá trị ngẫu nhiên để test, chưa calibrate nên chưa rõ
-  // if ((h >= 6) && (h <= 14) && (ssLight > 3800)) { 
-  //   return true;
-  // }
-  // return false;
+  struct tm timeinfo;
+  int h = timeinfo.tm_hour + 7; // (lệch 7h do utc+7)
+  // 06:00 đến 15:00 trời tối => kêu than tối quá
+  if ((h >= 6) && (h <= 15) && (ssLightAo > 3800)) { 
+    return true;
+  }
   return false;
 }
 

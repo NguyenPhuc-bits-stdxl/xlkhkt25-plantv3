@@ -136,6 +136,20 @@ void emlFinalize() {
     msg.timestamp = time(nullptr);
     Serial.println("GET timestamp done!");
 
+    // Check định dạng email người nhận
+    if (RECIPIENT_EMAIL == "") {
+        Serial.println("RM Email can't be null, task cancelled.");
+        return;
+    }
+    if (RECIPIENT_EMAIL.indexOf("@") == std::string::npos) {
+        Serial.println("RM Email doesn't sastify the format, task aborted.");
+        return;
+    }
+    if (RECIPIENT_EMAIL.length() < 7) { //a@a.com minlength = 7
+        Serial.println("RM Email too short, aborted");
+        return;
+    }
+
     // Gửi
     if (smtp.send(msg)) {
         Serial.println("SENT! Check your inbox!");

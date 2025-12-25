@@ -143,6 +143,8 @@ void scrListening() {
 
 void scrStartUp() {   
   scrClear();
-  tft.setCursor(2, 36);
-  tft.print("Starting up...");
+  display.drawXBitmap(0, 32, epd_bitmap_lgNovaEsp, 128, 48, ST77XX_GREEN);
+ 
+  tft.setCursor(20, 96);
+  tft.print("Đang tải...");
 }

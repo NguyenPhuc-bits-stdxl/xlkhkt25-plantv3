@@ -185,7 +185,7 @@ bool TFT_WAIT_LAST_PAGE = false;
 #define MSG_START_X 2
 #define MSG_START_Y 30
 
-#define KIEM_TRA_CAY_XANH_INTERVAL 60000 // 60s check 1 lần về việc khó chịu
+#define KIEM_TRA_CAY_XANH_INTERVAL 120000 // 120s check 1 lần về việc khó chịu
 long long KIEM_TRA_CAY_XANH_LAST_CHECKED;
 #define CAM_BIEN_INTERVAL 3000 // 3s update màn hình chờ (thông số cảm biến)
 long long CAM_BIEN_LAST_CHECKED;
@@ -206,7 +206,7 @@ bool scrxListening = false;
 int IGNORE_TIMES = 0;
 bool IGNORE_STATUS = false;   // đánh dấu việc cây cần trợ giúp từ lần tương tác gần nhất
                               // vì có thể lần 1 check Có, lần 2 check không có, 3 check không có..., rải rác có/không => đánh dấu lại
-#define IGNORE_SERIOUS 2
+#define IGNORE_SERIOUS 5
 
 #pragma endregion 
 
@@ -235,6 +235,7 @@ bool IGNORE_STATUS = false;   // đánh dấu việc cây cần trợ giúp từ
 String AUTHOR_EMAIL = "";
 String AUTHOR_PASSWORD = "";
 String RECIPIENT_EMAIL = "";
+String PLANT_NAME = "";
 
 #define SSL_MODE true
 #define AUTHENTICATION true
@@ -262,6 +263,9 @@ void smtpCb(SMTPStatus status)
 
 #pragma endregion Email
 
+// from lib_openai_groq_chat.ino
+String  MESSAGES; 
+
 void setup() 
 {     
   Serial.begin(115200); 
@@ -284,8 +288,8 @@ void setup()
   audio_play.setVolume( gl_VOL_INIT );  
   Serial.println("SYS I2S Playback initialized!");
   
-  KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() + 60000; // postpone 5p để cho người dùng config hoặc là yên tĩnh lúc đầu
-  CAM_BIEN_LAST_CHECKED = millis() + 10000; // hoãn 10s
+  KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() + 30000; // postpone 30s để cho người dùng config hoặc là yên tĩnh lúc đầu
+  CAM_BIEN_LAST_CHECKED = millis() + 5000; // hoãn 5s
 
   startupSoundPlayed = false;
   startupSoundStopped = false;
@@ -399,7 +403,7 @@ void loop()
   {  Serial.println( "< UNCOMF flag TOGGLED. WAIT... >" );
      sysReadSensors();
      dbgUncomfToggled = true;
-     KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() - 99999;
+     KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() - 9999999;
 
      UserRequest = "";
   } 
@@ -409,7 +413,7 @@ void loop()
   {  Serial.println( "< SENDING CHAT HISTORY. WAIT... >" );
      sysReadSensors();
      emlStart();
-     emlBodyConversation();
+     emlBodyConversation(MESSAGES, ssLightAo, ssTemperature, ssHumidity, IGNORE_TIMES, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str());
      emlFinalize();
 
      UserRequest = "";
@@ -422,7 +426,11 @@ void loop()
     // [USER] [REPORT] ?[SYS]
     sysReadSensors(); // lấy số liệu mới
     UserRequest = UserRequest + sysGetSensorsString() + (sysIsUncomfortable() ? sysGetUncomfortableString() : "");
-    
+    if (sysIsUncomfortable()) {
+      sysAccumulateUncomfortableState();
+      Serial.println("SYS USERREQ uncomfortable state toggled");
+    }
+
     Serial.println("Full prompt > [" + UserRequest + "]");
 
     // [bugfix/new]: ensure that all TTS websockets are closed prior open LLM websockets (otherwise LLM connection fails)
@@ -478,29 +486,74 @@ void loop()
      scrDrawMessage(MSG_START_X, MSG_START_Y, LLM_Feedback.c_str(), 8);
   }
    
-  // ------ Điều chỉnh âm lượng -------------------------------------------------------------------------------------------------    
-  if (pin_VOL_BTN != NO_PIN)      // --- Alternative: using a VOL_BTN to toggle thru N values (e.g. TECHISMS or Elato AI pcb)
-  {  static bool flg_volume_updated = false; 
-     static int volume_level = -1; 
-     if (digitalRead(pin_VOL_BTN) == LOW && !flg_volume_updated)          
-     {
-        int steps = sizeof(gl_VOL_STEPS) / sizeof(gl_VOL_STEPS[0]);
-        volume_level = ((volume_level+1) % steps);  
-        Serial.println( "New Audio Volume: [" + (String) volume_level + "] = " + (String) gl_VOL_STEPS[volume_level] );
+  // ------ Điều chỉnh âm lượng + gửi mail --------------------------------------------------------------------------------------    
+ if (pin_VOL_BTN != NO_PIN)
+{
+    static bool flg_volume_updated = false;
+    static bool flg_email_sent     = false;   // chặn gửi email liên hoàn
+    static int  volume_level       = -1;
 
-        scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoVol, ST77XX_BLACK);
-        if (volume_level == 0) scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoVolMute, ST77XX_BLACK);
-        scrDrawMessageFixed(MSG_START_X, MSG_START_Y, (String("Âm lượng \n") + volume_level*10 + "%").c_str());
+    int steps = sizeof(gl_VOL_STEPS) / sizeof(gl_VOL_STEPS[0]);
+
+    // ===== VOL vừa được nhấn =====
+    if (digitalRead(pin_VOL_BTN) == LOW && !flg_volume_updated)
+    {
+        volume_level = (volume_level + 1) % steps;
+
+        Serial.println(
+          "New Audio Volume: [" + String(volume_level) + "] = " +
+          String(gl_VOL_STEPS[volume_level])
+        );
+
+        scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM,
+                    epd_bitmap_icoVol, ST77XX_BLACK);
+        if (volume_level == 0)
+            scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM,
+                        epd_bitmap_icoVolMute, ST77XX_BLACK);
+
+        scrDrawMessageFixed(
+          MSG_START_X, MSG_START_Y,
+          (String("Âm lượng \n") + volume_level * 10 + "%").c_str()
+        );
+
+        audio_play.setVolume(gl_VOL_STEPS[volume_level]);
+        sysResetCounters();
 
         flg_volume_updated = true;
-        audio_play.setVolume( gl_VOL_STEPS[volume_level] );  
+    }
 
-        sysResetCounters(); // thêm vào 17/12
+    // ===== VOL đang giữ + có bấm REC =====
+    if ((flg_volume_updated) &&
+        (flg_RECORD_BTN == LOW) &&
+        (!flg_email_sent))
+    {
+        // Lùi âm lượng 1 nấc vì VOL được bấm trước
+        volume_level = (volume_level - 1 + steps) % steps;
+        audio_play.setVolume(gl_VOL_STEPS[volume_level]);
+
+        Serial.println("Sending Email");
+        delay(2000); //debounce
+
+        emlStart();
+        emlBodyConversation(MESSAGES, ssLightAo, ssTemperature, ssHumidity, IGNORE_TIMES, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str());
+        emlFinalize();
+
+        flg_email_sent = true;
     }
-    if (digitalRead(pin_VOL_BTN) == HIGH && flg_volume_updated)         
-    {  flg_volume_updated = false;    
+
+    // ===== Nhả VOL =====
+    if (digitalRead(pin_VOL_BTN) == HIGH && flg_volume_updated)
+    {
+        flg_volume_updated = false;
     }
-  }
+
+    // ===== Nhả REC → cho phép gửi lại lần sau =====
+    if (flg_RECORD_BTN == HIGH)
+    {
+        flg_email_sent = false;
+    }
+}
+
   
   // ----------------------------------------------------------------------------------------------------------------------------
   // Play AUDIO (Schreibfaul1 loop for Play Audio (details here: https://github.com/schreibfaul1/ESP32-audioI2S))
@@ -555,7 +608,7 @@ void loop()
             Serial.println("SYS UC NO AI");
             scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoStressed, ST77XX_RED);
             scrPrepareTftPages(sysGetUncomfortableStringIgnore().c_str(), MSG_START_Y);
-           scrDrawMessageFixed(MSG_START_X, MSG_START_Y, TFT_PAGES[0].c_str());
+            scrDrawMessageFixed(MSG_START_X, MSG_START_Y, TFT_PAGES[0].c_str());
          }
 
          // Send Email
