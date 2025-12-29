@@ -37,7 +37,7 @@ void wmConfig() {
   WiFiManagerParameter emailField("email", "Địa chỉ nhận email thông báo? (tùy chọn)", "", 128);
   wm.addParameter(&emailField);
 
-  WiFiManagerParameter plnameField("plant name", "Cây bạn đang trồng là cây gì? (tùy chọn)", "", 128);
+  WiFiManagerParameter plnameField("plname", "Cây bạn đang trồng là cây gì? (tùy chọn)", "", 128);
   wm.addParameter(&plnameField);
   
   wm.startConfigPortal(wmBroadcast);

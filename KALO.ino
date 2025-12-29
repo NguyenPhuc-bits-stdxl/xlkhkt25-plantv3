@@ -234,8 +234,10 @@ bool IGNORE_STATUS = false;   // đánh dấu việc cây cần trợ giúp từ
 // Vì lý do an toàn, thông tin này sẽ được gửi riêng, check Zalo, không xem GitHub
 String AUTHOR_EMAIL = "";
 String AUTHOR_PASSWORD = "";
+
+// Config qua WM
 String RECIPIENT_EMAIL = "";
-String PLANT_NAME = "";
+String PLANT_NAME = "cây xanh bình thường";
 
 #define SSL_MODE true
 #define AUTHENTICATION true

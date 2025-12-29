@@ -72,7 +72,8 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
        int friends_max = sizeof(FRIENDS) / sizeof(FRIENDS[0]);   // calculate amount of friends (dynamic array)  
        if (gl_CURR_FRIEND < 0 || gl_CURR_FRIEND > friends_max-1) {gl_CURR_FRIEND = random(friends_max); }                     
        MESSAGES =  "{\"role\": \"system\", \"content\": \"";  
-       MESSAGES += FRIENDS[gl_CURR_FRIEND].prompt;      
+       MESSAGES += FRIENDS[gl_CURR_FRIEND].prompt;     
+       MESSAGES += sysBuildPlantInfoPrompt(PLANT_NAME); 
        MESSAGES += "\"}";        
        // ## NEW since Sept. 2025 update:
        // Starting NTP server in background to update system time (so we don't waste latency in case we ever send Chat via EMAIL)

@@ -156,3 +156,19 @@ String sysGetUncomfortableStringIgnore() {
   );
   return String(buf);
 }
+
+String sysBuildPlantInfoPrompt(const String& plantName) {
+    char buf[320];  // đủ cho đoạn này
+
+    snprintf(
+        buf,
+        sizeof(buf),
+        "Được biết thêm, bạn là một %s. "
+        "Hãy sử dụng đặc điểm sinh học và nhu cầu sinh trưởng phổ biến của loài '%s' "
+        "(hoặc cây xanh bình thường nếu không xác định) để phản hồi cho phù hợp. ",
+        plantName.c_str(),
+        plantName.c_str()
+    );
+
+    return String(buf);
+}
