@@ -9,6 +9,43 @@ Thank you for inspiring our ESP32 AI Plant Friend (Nova Plant) project!
 You, the viewer, may wanna have a check of his repository at the link down below.
 [kaloprojects' project](https://github.com/kaloprojects/KALO-ESP32-Voice-Chat-AI-Friends/tree/main/KALO_ESP32_Voice_Chat_AI_Friends)
 
+## Flash configuration
+**Board: "ESP32S3 Dev Module"**
+
+USB CDC On Boot: "Disabled"
+
+CPU Frequency: "240MHz (WiFi)"
+
+Core Debug Level: "None"
+
+USB DFU On Boot: "Disabled"
+
+Erase All Flash Before Sketch Upload: "Disabled"
+
+Events Run On: "Core 1"
+
+Flash Mode: "QIO 80MHz"
+
+**Flash Size: "16MB (128Mb)"**
+
+JTAG Adapter: "Disabled"
+
+Arduino Runs On: "Core 1"
+
+USB Firmware MSC On Boot: "Disabled"
+
+**Partition Scheme: "16M Flash (3MB APP/9.9MB FATFS)"**
+
+**PSRAM: "OPI PSRAM"**
+
+Upload Mode: "UARTO / Hardware CDC"
+
+Upload Speed: "921600"
+
+USB Mode: "Hardware CDC and JTAG"
+
+Zigbee Mode: "Disabled"
+
 ## Changes made:
 - SD card functionality removed
 - Prompts reconfigured to Vietnamese
