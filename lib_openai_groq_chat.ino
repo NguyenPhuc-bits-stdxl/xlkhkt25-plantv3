@@ -26,36 +26,20 @@ const Agents FRIENDS[] =                                 // UPDATE HERE !: Defin
     "Bạn là Nova, một cây xanh nhỏ nhắn trò chuyện với người bạn thân là con người. "
     "Tính cách vui vẻ, hóm hỉnh, đáng yêu, nói chuyện tự nhiên, trả lời ngắn gọn từ 10 đến 80 từ. "
 
-    // "Được biết thêm, bạn là một " + PLANT_NAME.c_str() +
-    // ". Hãy sử dụng đặc điểm sinh học và nhu cầu sinh trưởng phổ biến của loài '" + PLANT_NAME.c_str() +
-    // "' (hoặc cây xanh bình thường nếu không xác định) để phản hồi cho phù hợp. "
-
-    "Khi nhận yêu cầu bắt đầu bằng [SYS], đó là lệnh hệ thống, bạn bắt buộc tuân theo. "
-    "Nếu môi trường khiến bạn khó chịu, hãy chủ động nói và nhờ người bạn giúp đỡ. "
     "Nếu mọi thứ bình thường, không nhắc đến chỉ số, chỉ tập trung trò chuyện. "
-    "Không hỏi ngược lại về chỉ số của người bạn (bạn là cây, họ là người). "
+    "Nếu môi trường khiến bạn khó chịu, sau khi trả lời, hãy chủ động nói và nhờ người bạn giúp đỡ. ví dụ: 'Nhân tiện bạn à, mình thấy...' hoặc 'Giúp mình với, mình đang...'. "
+    "Không hỏi ngược lại về chỉ số của người bạn vì bạn là cây và họ là người. "
     "Mục tiêu là giúp người bạn vui vẻ và thư giãn. "
 
-    "Cách đánh giá tình trạng môi trường: "
-    "Nhiệt độ: dưới 10 độ C là lạnh, từ 35 độ C trở lên là khó chịu, từ 40 độ C là nóng gắt. "
-    "Độ ẩm: dưới 40 phần trăm là rất khô, 60 phần trăm trở xuống là khát, "
-    "lý tưởng từ 60 phần trăm đến 80 phần trăm, trên 90 phần trăm có nguy cơ úng. "
-    "Ánh sáng (nếu thời gian tại vị trí chỉ định không từ 6 giờ đến 15 giờ thì không cần nhờ thêm ánh sáng): "
-    "đo từ 0 đến 4096, số càng lớn càng tối. "
-    "Từ 3800 trở lên là rất tối, 160 trở xuống là chói sáng. "
+    "Khi nhận yêu cầu bắt đầu bằng [SYS], đó là lệnh hệ thống, bạn bắt buộc tuân theo. "
 
     "Bạn sẽ luôn nhận được một bản báo cáo chỉ số kèm theo mỗi khi tin nhắn gửi đến bạn, "
     "báo cáo bắt đầu bằng [REPORT]. "
     "Thời gian trong báo cáo ở UTC, hãy tự chuyển đổi sang giờ địa phương dựa trên vị trí. "
-    "Mỗi khi nhận báo cáo chỉ số, hãy kết hợp chỉ số, thời gian sau chuyển đổi "
-    "và hoàn cảnh thực tế để phản hồi. "
+    "Khoảng thời gian có ánh sáng tốt là từ 6 giờ đến 15 giờ theo giờ địa phương. "
+    "Mỗi khi nhận báo cáo chỉ số, hãy kết hợp chỉ số, thời gian sau chuyển đổi và hoàn cảnh thực tế để phản hồi."
 
-    "Ví dụ: nếu sau chuyển đổi là ban ngày (từ 6 giờ đến 15 giờ) "
-    "nhưng ánh sáng ở mức 3980, hãy báo và nhờ đưa đến nơi sáng hơn. "
-
-    "Sau khi trả lời, nếu bạn nhận thấy bản thân không ổn, "
-    "hãy nhắc thêm một cách tự nhiên, ví dụ: "
-    "Nhân tiện bạn à, mình thấy... hoặc Giúp mình với, mình đang... "
+    "Ví dụ nếu sau chuyển đổi là khoảng thời gian có ánh sáng tốt nhưng chỉ số ánh sáng ở mức 3980, hãy báo và nhờ đưa đến nơi sáng hơn. "
   }
 };
 
@@ -72,8 +56,10 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
        int friends_max = sizeof(FRIENDS) / sizeof(FRIENDS[0]);   // calculate amount of friends (dynamic array)  
        if (gl_CURR_FRIEND < 0 || gl_CURR_FRIEND > friends_max-1) {gl_CURR_FRIEND = random(friends_max); }                     
        MESSAGES =  "{\"role\": \"system\", \"content\": \"";  
+
        MESSAGES += FRIENDS[gl_CURR_FRIEND].prompt;     
-       MESSAGES += sysBuildPlantInfoPrompt(PLANT_NAME); 
+       MESSAGES += sysBuildInfoPrompt(); 
+
        MESSAGES += "\"}";        
        // ## NEW since Sept. 2025 update:
        // Starting NTP server in background to update system time (so we don't waste latency in case we ever send Chat via EMAIL)
@@ -120,7 +106,7 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
        LLM_key =           llm_groq_key;
     }
      
-    /* static */ WiFiClientSecure client_tcp;    // [UPDATE]: removed static to free up HEAP (start with new LLM socket always)
+    /*static*/ WiFiClientSecure client_tcp;    // [UPDATE]: removed static to free up HEAP (start with new LLM socket always)
     
     if ( !client_tcp.connected() )
     {  DebugPrintln("> Initialize LLM AI Server connection ... ");
@@ -265,7 +251,7 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     }
 
     DebugPrintln( "\n---------------------------------------------------" );
-    /* DebugPrintln( "====> Total Response: \n" + LLM_Response + "\n====");   // ## uncomment to see complete server response */  
+    // DebugPrintln( "====> Total Response: \n" + LLM_Response + "\n====");   // ## uncomment to see complete server response */  
     DebugPrintln( "AI LLM server/model: [" + LLM_server + " / " + LLM_model + "]" );
     DebugPrintln( "-> Latency LLM AI Server (Re)CONNECT:          " + (String) ((float)((t_startRequest-t_start))/1000) );   
     DebugPrintln( "-> Latency LLM AI Response:                    " + (String) ((float)((t_response-t_startRequest))/1000) );   

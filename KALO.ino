@@ -205,8 +205,28 @@ bool scrxListening = false;
 //    (không call ChatGPT vì sẽ tốn API không cần thiết)
 int IGNORE_TIMES = 0;
 bool IGNORE_STATUS = false;   // đánh dấu việc cây cần trợ giúp từ lần tương tác gần nhất
-                              // vì có thể lần 1 check Có, lần 2 check không có, 3 check không có..., rải rác có/không => đánh dấu lại
 #define IGNORE_SERIOUS 5
+
+String PLANT_NAME = "cây xanh bình thường";
+String YOU_CALL = "bạn";
+String YOU_NAME = "(không rõ)";
+String YOU_DESC = "vui vẻ, đơn giản, lạc quan, hơi hướng nội";
+String YOU_AGE = "(không rõ)"; // cứ lưu là string, vì dù gì này cũng đưa vào prompt cho AI
+
+const char* DEF_PLANT_NAME = "cây xanh bình thường";
+const char* DEF_YOU_CALL = "bạn";
+const char* DEF_YOU_NAME = "(không rõ)";
+const char* DEF_YOU_DESC = "vui vẻ, đơn giản, lạc quan, hơi hướng nội";
+const char* DEF_YOU_AGE = "(không rõ)";
+
+float THRESH_TEMP_MIN  = 10.0f;
+float THRESH_TEMP_MAX  = 40.0f;
+float THRESH_HUMID_MIN = 60.0f;
+float THRESH_HUMID_MAX = 90.0f;
+float THRESH_LIGHT_MIN = 0.0f;
+float THRESH_LIGHT_MAX = 3800.0f;
+
+bool SETUP_GET_THRESH = false;
 
 #pragma endregion 
 
@@ -237,7 +257,6 @@ String AUTHOR_PASSWORD = "";
 
 // Config qua WM
 String RECIPIENT_EMAIL = "";
-String PLANT_NAME = "cây xanh bình thường";
 
 #define SSL_MODE true
 #define AUTHENTICATION true
@@ -297,6 +316,30 @@ void setup()
   startupSoundStopped = false;
   TFT_MESSAGE_AVAILABLE = false;
   Serial.println("SYS All set! READY!");
+
+  Serial.println("DBG PLANT INFO");
+  Serial.println(PLANT_NAME);
+  Serial.println(YOU_CALL);
+  Serial.println(YOU_NAME);
+  Serial.println(YOU_DESC);
+  Serial.println(YOU_AGE);
+  Serial.print(THRESH_TEMP_MIN);
+  Serial.print(THRESH_TEMP_MAX);
+  Serial.print(THRESH_HUMID_MIN);
+  Serial.print(THRESH_HUMID_MAX);
+  Serial.print(THRESH_LIGHT_MIN);
+  Serial.println(THRESH_LIGHT_MAX);
+  Serial.println("DBG END DIAG");
+
+   // Nếu chưa biết thông tin về cây (FALSE) --> CALL AI lấy thông tin
+  if (!SETUP_GET_THRESH) {
+      Serial.println("SYS SETUP PHASE 2");
+      audio_play.stopSong();
+      String ThreshFbk = OpenAI_Groq_LLM( sysBuildPlantThresholdPrompt(), OPENAI_KEY, true, GROQ_KEY );
+      sysParsePlantThres(ThreshFbk);
+      prefs.putBool("wmstGetThresh", true); // set TRUE
+      ESP.restart(); // restart để áp dụng hiệu lực
+  }
 }
 
 
@@ -393,13 +436,6 @@ void loop()
   cmd.toUpperCase();
   cmd.replace(".", "");
 
-//   // RADIO
-//   if (cmd.indexOf("RADIO") >=0 )
-//   {  Serial.println( "< Streaming German RADIO: SWR3 >" );  
-//      audio_play.connecttohost( "https://liveradio.swr.de/sw282p3/swr3/play.mp3" ); 
-//      UserRequest = "";
-//   } 
-  
   // DBG: ZXCVUNCF
   if (cmd.indexOf("ZXCVUNCF") >=0 )
   {  Serial.println( "< UNCOMF flag TOGGLED. WAIT... >" );
