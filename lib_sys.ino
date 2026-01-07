@@ -215,7 +215,7 @@ String sysBuildInfoPrompt() {
 }
 
 String sysBuildPlantThresholdPrompt() {
-    char buf[1024];
+    char buf[2040];
 
     snprintf(
         buf,
@@ -297,4 +297,24 @@ bool sysParsePlantThres(String response) {
     prefs.putFloat("wmstLmax", lmax);
 
     return true;
+}
+
+void sysUpdateShortTermMem(String response) {
+  prefs.putString("sysStMem", response);
+  Serial.println();
+  Serial.print("SYSMEM updated: ");
+  Serial.println(response);
+}
+
+String sysGetShortTermMem() {
+  char buf[1024];
+
+    snprintf(
+        buf,
+        sizeof(buf),
+        "[MEM] %s [SYS] Sau đoạn hội thoại, hãy tạo đoạn trí nhớ ngắn hạn mới sau đính kèm trong câu trả lời chỉ thị [MEM].",
+        prefs.getString("sysStMem", "Mình rất háo hức muốn gặp người bạn của mình.").c_str()
+    );
+
+    return String(buf);
 }

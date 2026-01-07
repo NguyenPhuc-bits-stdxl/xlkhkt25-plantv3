@@ -27,7 +27,6 @@ const Agents FRIENDS[] =                                 // UPDATE HERE !: Defin
     "Tính cách vui vẻ, hóm hỉnh, đáng yêu, nói chuyện tự nhiên, trả lời ngắn gọn từ 10 đến 80 từ. "
 
     "Nếu mọi thứ bình thường, không nhắc đến chỉ số, chỉ tập trung trò chuyện. "
-    "Nếu môi trường khiến bạn khó chịu, sau khi trả lời, hãy chủ động nói và nhờ người bạn giúp đỡ. ví dụ: 'Nhân tiện bạn à, mình thấy...' hoặc 'Giúp mình với, mình đang...'. "
     "Không hỏi ngược lại về chỉ số của người bạn vì bạn là cây và họ là người. "
     "Mục tiêu là giúp người bạn vui vẻ và thư giãn. "
 
@@ -38,8 +37,12 @@ const Agents FRIENDS[] =                                 // UPDATE HERE !: Defin
     "Thời gian trong báo cáo ở UTC, hãy tự chuyển đổi sang giờ địa phương dựa trên vị trí. "
     "Khoảng thời gian có ánh sáng tốt là từ 6 giờ đến 15 giờ theo giờ địa phương. "
     "Mỗi khi nhận báo cáo chỉ số, hãy kết hợp chỉ số, thời gian sau chuyển đổi và hoàn cảnh thực tế để phản hồi."
-
     "Ví dụ nếu sau chuyển đổi là khoảng thời gian có ánh sáng tốt nhưng chỉ số ánh sáng ở mức 3980, hãy báo và nhờ đưa đến nơi sáng hơn. "
+    "Khi thời gian đã vào buổi tối, không cần nhờ họ đưa bạn đến nơi sáng hơn. "
+
+    "Cuối mỗi câu trả lời, tạo một đoạn [MEM] là TRÍ NHỚ NGẮN HẠN (10–30 từ). "
+    "Chỉ ghi nhận thông tin được người dùng thể hiện rõ trong cuộc trò chuyện như mối quan tâm, mục tiêu, phong cách giao tiếp, trạng thái cảm xúc nếu họ nói trực tiếp. "
+    "KHÔNG suy đoán hoặc bịa thêm thông tin chưa được đề cập."
   }
 };
 
@@ -206,12 +209,13 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     // 'talkative code below' but want to make sure that also complex cases (e.g. " chars inside the response are working well)
     // Arduino String Reference: https://docs.arduino.cc/language-reference/de/variablen/data-types/stringObject/#funktionen
     
-    int pos_start, pos_end;                                     // proper way to extract tag "text", talkative but correct
+    int pos_start, pos_end, pos_mem;                                     // proper way to extract tag "text", talkative but correct
     bool found = false;                                         // supports also complex tags, e.g.  > "What means \"RGB\"?" < 
     pos_start = LLM_Response.indexOf("\"content\":");           // search tag ["content": "Answer..."]   
     if (pos_start > 0)                                         
     { pos_start = LLM_Response.indexOf("\"", pos_start + strlen("\"content\":")) + 1;   // search next " -> now points to 'A'
       pos_end = pos_start + 1;
+
       while (!found)                                        
       { found = true;                                           // avoid endless loop in case no " found (won't happen anyhow)  
         pos_end = LLM_Response.indexOf("\"", pos_end);          // search the final " ... but ignore any rare \" inside the text!  
@@ -220,9 +224,16 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
            if (LLM_Response.substring(pos_end -1, pos_end) == "\\") { found = false; pos_end++; }
         }           
       }            
+
+      // 06/01: tách MEM
+      pos_mem = LLM_Response.indexOf("[MEM]", pos_start + strlen("\"content\":"));
+      if (pos_mem == -1) pos_mem = SYSINT_PINF; // đặt thành số cực lớn để tránh lỗi tách bậy
     }                           
     if( pos_start > 0 && (pos_end > pos_start) )
-    { Feedback = LLM_Response.substring(pos_start,pos_end);  // store cleaned response into String 'Feedback'   
+    { 
+      // 06/01: lấy pos_mem nếu có, còn không thì mặc định pos_end
+      Feedback = LLM_Response.substring(pos_start,pos_mem < pos_end ? pos_mem : pos_end);  // store cleaned response into String 'Feedback'   
+
       Feedback.trim();     
     }
 
@@ -251,7 +262,7 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     }
 
     DebugPrintln( "\n---------------------------------------------------" );
-    // DebugPrintln( "====> Total Response: \n" + LLM_Response + "\n====");   // ## uncomment to see complete server response */  
+    DebugPrintln( "====> Total Response: \n" + LLM_Response + "\n====");   // ## uncomment to see complete server response */  
     DebugPrintln( "AI LLM server/model: [" + LLM_server + " / " + LLM_model + "]" );
     DebugPrintln( "-> Latency LLM AI Server (Re)CONNECT:          " + (String) ((float)((t_startRequest-t_start))/1000) );   
     DebugPrintln( "-> Latency LLM AI Response:                    " + (String) ((float)((t_response-t_startRequest))/1000) );   
@@ -259,8 +270,10 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     DebugPrintln( "---------------------------------------------------" );   
     DebugPrint( "\nLLM >" ); 
     
+    // 06/01: update TRÍ NHỚ NGẮN HẠN
+    sysUpdateShortTermMem(pos_mem == SYSINT_PINF ? "Mình rất háo hức muốn gặp người bạn của mình." : LLM_Response.substring(pos_mem, pos_end));
+  
     // and return extracted feedback
-    
     return ( Feedback );                           
 }
 

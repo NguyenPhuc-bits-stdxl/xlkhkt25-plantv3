@@ -28,7 +28,7 @@ bool    DEBUG = true;
 
 #define NO_PIN -1
 
-#define pin_I2S_DOUT 16  
+#define pin_I2S_DOUT 18  
 #define pin_I2S_LRC 8   
 #define pin_I2S_BCLK 3
 #define pin_VOL_BTN 41      
@@ -287,6 +287,8 @@ void smtpCb(SMTPStatus status)
 // from lib_openai_groq_chat.ino
 String  MESSAGES; 
 
+#define SYSINT_PINF 2147483640
+
 void setup() 
 {     
   Serial.begin(115200); 
@@ -300,6 +302,36 @@ void setup()
   Serial.println("SYS Initializing components...");
   sysInit();
   Serial.println("SYS Components e.g. Screen + Prefs + WiFi + sensors");
+
+  Serial.println("DBG PLANT INFO");
+  Serial.println(PLANT_NAME);
+  Serial.println(YOU_CALL);
+  Serial.println(YOU_NAME);
+  Serial.println(YOU_DESC);
+  Serial.println(YOU_AGE);
+  Serial.println(THRESH_TEMP_MIN);
+  Serial.println(THRESH_TEMP_MAX);
+  Serial.println(THRESH_HUMID_MIN);
+  Serial.println(THRESH_HUMID_MAX);
+  Serial.println(THRESH_LIGHT_MIN);
+  Serial.println(THRESH_LIGHT_MAX);
+  Serial.println("DBG END DIAG");
+
+   // Nếu chưa biết thông tin về cây (FALSE) --> CALL AI lấy thông tin
+  if (!SETUP_GET_THRESH) {
+      Serial.println("SYS SETUP PHASE 2");
+      audio_play.stopSong();
+      prefs.putString("sysStMem", "Mình rất háo hức muốn gặp người bạn của mình.");
+      String ThreshFbk = OpenAI_Groq_LLM( sysBuildPlantThresholdPrompt(), OPENAI_KEY, true, GROQ_KEY );
+      sysParsePlantThres(ThreshFbk);
+      prefs.putBool("wmstGetThresh", true); // set TRUE
+      Serial.println("SYS SETUP 2 FINISHED");
+      ESP.restart(); // restart để áp dụng hiệu lực
+  }
+
+  // Bugfix 06/01: Vì một lý do rất ngớ ngẩn, có lẽ tràn RAM nên khi gọi LLM là crash
+  // Giải pháp khả thi lúc này là thử lùi code triển khai âm thanh ra xa để tránh gây tải nặng
+  // Note: cách này khắc phục cho phase 2 setup, chứ vẫn nên giữ âm thanh khởi động
 
   I2S_Recording_Init();    
   Serial.println("SYS I2S Recording initialized!");
@@ -316,30 +348,6 @@ void setup()
   startupSoundStopped = false;
   TFT_MESSAGE_AVAILABLE = false;
   Serial.println("SYS All set! READY!");
-
-  Serial.println("DBG PLANT INFO");
-  Serial.println(PLANT_NAME);
-  Serial.println(YOU_CALL);
-  Serial.println(YOU_NAME);
-  Serial.println(YOU_DESC);
-  Serial.println(YOU_AGE);
-  Serial.print(THRESH_TEMP_MIN);
-  Serial.print(THRESH_TEMP_MAX);
-  Serial.print(THRESH_HUMID_MIN);
-  Serial.print(THRESH_HUMID_MAX);
-  Serial.print(THRESH_LIGHT_MIN);
-  Serial.println(THRESH_LIGHT_MAX);
-  Serial.println("DBG END DIAG");
-
-   // Nếu chưa biết thông tin về cây (FALSE) --> CALL AI lấy thông tin
-  if (!SETUP_GET_THRESH) {
-      Serial.println("SYS SETUP PHASE 2");
-      audio_play.stopSong();
-      String ThreshFbk = OpenAI_Groq_LLM( sysBuildPlantThresholdPrompt(), OPENAI_KEY, true, GROQ_KEY );
-      sysParsePlantThres(ThreshFbk);
-      prefs.putBool("wmstGetThresh", true); // set TRUE
-      ESP.restart(); // restart để áp dụng hiệu lực
-  }
 }
 
 
@@ -463,7 +471,11 @@ void loop()
     // Chèn string sensor vào để báo cho cây biết thông số của nó, kèm SYS nếu khó chịu
     // [USER] [REPORT] ?[SYS]
     sysReadSensors(); // lấy số liệu mới
-    UserRequest = UserRequest + sysGetSensorsString() + (sysIsUncomfortable() ? sysGetUncomfortableString() : "");
+
+    // FLAG DEBUG: DBGMSG1 nếu có flag này thì gửi nội dung tin nhắn như đã nêu, không chỉnh thêm
+    if (UserRequest.indexOf("@DBGMSG1") < 0)
+      UserRequest = UserRequest + sysGetSensorsString() + (sysIsUncomfortable() ? sysGetUncomfortableString() : "") + sysGetShortTermMem();
+
     if (sysIsUncomfortable()) {
       sysAccumulateUncomfortableState();
       Serial.println("SYS USERREQ uncomfortable state toggled");
