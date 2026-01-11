@@ -1,14 +1,6 @@
 # Giới thiệu
 Chậu cây thông minh phiên bản 3 (Sản phẩm dự thi giai đoạn tái cấu trúc lần thứ 2)
 
-# Big thanks to kaloprojects
-Chân thành cảm ơn đến tác giả kaloprojects đã truyền cảm hứng cho dự án Cây xanh AI Nova của nhóm chúng em!
-Bạn, người xem repo này, có thể muốn xem thử repo của tác giả kaloprojects qua link ở dưới.
-
-Thank you for inspiring our ESP32 AI Plant Friend (Nova Plant) project!
-You, the viewer, may wanna have a check of his repository at the link down below.
-[kaloprojects' project](https://github.com/kaloprojects/KALO-ESP32-Voice-Chat-AI-Friends/tree/main/KALO_ESP32_Voice_Chat_AI_Friends)
-
 ## Flash configuration
 **Board: "ESP32S3 Dev Module"**
 
