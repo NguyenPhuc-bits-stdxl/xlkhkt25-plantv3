@@ -1,14 +1,14 @@
-void scrPrepareTftPages(const char* msg, uint8_t startY)
+void scrPrepareTftPages(const char* msg, uint16_t startY)
 {
   TFT_PAGES_LEN = 0;
 
-  for (uint8_t i = 0; i < MAX_TFT_PAGES; i++)
+  for (uint16_t i = 0; i < MAX_TFT_PAGES; i++)
     TFT_PAGES[i] = "";
 
-  const uint8_t MAX_LINES_PER_PAGE =
+  const uint16_t MAX_LINES_PER_PAGE =
       (SCREEN_H - startY) / LINE_HEIGHT;
 
-  uint8_t currentLineCount = 0;
+  uint16_t currentLineCount = 0;
 
   String word = "";
   String line = "";

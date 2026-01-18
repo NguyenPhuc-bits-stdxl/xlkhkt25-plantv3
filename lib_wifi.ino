@@ -16,9 +16,14 @@ void wmSaveCreds(String newSsid, String newPwd, String wmstPlantName, String wms
   prefs.putString("wmstDesc", wmstDesc);
   prefs.putString("wmstAge", wmstAge);
   
+  // sang Phase 2 của setup - lấy thông tin cây - set flag FALSE
+  prefs.putBool("wmstSetupDone", false);
+
   scrClear();
   scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoSetup, ST77XX_RED);
   scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsSaveSuccess);
+  
+  ESP.restart();
 }
 
 void wmReadCreds() {
@@ -59,18 +64,13 @@ void wmConfig() {
   wm.startConfigPortal(wmBroadcast);
   if (wmShouldSaveConfig) {
     wmSaveCreds(wm.getWiFiSSID(), wm.getWiFiPass(), plnameField.getValue(), emailField.getValue(), callField.getValue(), nameField.getValue(), describeField.getValue(), ageField.getValue());
-    
-    // sang Phase 2 của setup - lấy thông tin cây - set flag FALSE
-    prefs.putBool("wmstGetThresh", false);
-
-    ESP.restart();
   }
 }
 
 void wmConnect() {
   wmReadCreds();
   wm.autoConnect(wmSsid.c_str(), wmPwd.c_str());
-  
+    
   scrClear();
   scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoWifi, ST77XX_GREEN);
   scrDrawMessageFixed(MSG_START_X, MSG_START_Y, wmsEstablished);

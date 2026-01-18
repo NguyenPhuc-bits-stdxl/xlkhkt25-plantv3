@@ -5,7 +5,7 @@
 #define I2S_LR            LOW    // LOW because L/R pin of INMP441 is connected to GND (default LEFT channel)                                 
 #define I2S_WS            17            
 #define I2S_SD            15        
-#define I2S_SCK           16          
+#define I2S_SCK           18         
                                                    
 #define SAMPLE_RATE       16000 
 #define BITS_PER_SAMPLE   16   

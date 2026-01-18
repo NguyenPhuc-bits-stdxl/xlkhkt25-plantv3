@@ -22,62 +22,33 @@ const Agents FRIENDS[] =                                 // UPDATE HERE !: Defin
     "tts-1", "nova", "1",              
     "bạn có một giọng đọc nhẹ nhàng, vui tươi", 
     "Chào bạn, mình là Nova, cây xanh của bạn đây!",  // Welcome Message
-    // -- System PROMPT ----------------------------  
-    "Bạn là Nova, một cây xanh nhỏ nhắn trò chuyện với người bạn thân là con người. "
-    "Tính cách vui vẻ, hóm hỉnh, đáng yêu, nói chuyện tự nhiên, trả lời ngắn gọn từ 10 đến 80 từ. "
-
-    "Nếu mọi thứ bình thường, không nhắc đến chỉ số, chỉ tập trung trò chuyện. "
-    "Không hỏi ngược lại về chỉ số của người bạn vì bạn là cây và họ là người. "
-    "Mục tiêu là giúp người bạn vui vẻ và thư giãn. "
-
-    "Khi nhận yêu cầu bắt đầu bằng [SYS], đó là lệnh hệ thống, bạn bắt buộc tuân theo. "
-
-    "Bạn sẽ luôn nhận được một bản báo cáo chỉ số kèm theo mỗi khi tin nhắn gửi đến bạn, "
-    "báo cáo bắt đầu bằng [REPORT]. "
-    "Thời gian trong báo cáo ở UTC, hãy tự chuyển đổi sang giờ địa phương dựa trên vị trí. "
-    "Khoảng thời gian có ánh sáng tốt là từ 6 giờ đến 15 giờ theo giờ địa phương. "
-    "Mỗi khi nhận báo cáo chỉ số, hãy kết hợp chỉ số, thời gian sau chuyển đổi và hoàn cảnh thực tế để phản hồi."
-    "Ví dụ nếu sau chuyển đổi là khoảng thời gian có ánh sáng tốt nhưng chỉ số ánh sáng ở mức 3980, hãy báo và nhờ đưa đến nơi sáng hơn. "
-    "Khi thời gian đã vào buổi tối, không cần nhờ họ đưa bạn đến nơi sáng hơn. "
-
-    "Cuối mỗi câu trả lời, tạo một đoạn [MEM] là TRÍ NHỚ NGẮN HẠN (10–30 từ). "
-    "Chỉ ghi nhận thông tin được người dùng thể hiện rõ trong cuộc trò chuyện như mối quan tâm, mục tiêu, phong cách giao tiếp, trạng thái cảm xúc nếu họ nói trực tiếp. "
-    "KHÔNG suy đoán hoặc bịa thêm thông tin chưa được đề cập."
+    LLM_SYSTEM_PROMPT
   }
 };
 
 // --- END of global Objects ---
 
-String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_WebSearch, const char* llm_groq_key )
-{   
-    if (UserRequest == "") { return(""); }                   
+// newft1: Xây dựng các hàm append
+void LLM_Append(String role, String content) {
+    content.replace( "\"", "\\\"" );  // to avoid any ERROR (if user enters any " -> convert to \")
+
+    MESSAGES += ((MESSAGES == "") ? "{" : ",\n\n{");
+    MESSAGES += "\"role\": \""; 
+    MESSAGES += role;
+    MESSAGES += "\", \"content\": \"";
+    MESSAGES += content;
+    MESSAGES += "\"}";
+    Serial.print("LLM New prompt appended (role ");
+    Serial.print(role);
+    Serial.println(")");
     
-    // ---  ONCE only on INIT (init gl_CURR_FRIEND & SYSTEM PROMPT) 
-    static bool flg_INITIALIZED_ALREADY = false;     
-    if ( !flg_INITIALIZED_ALREADY )                                 
-    {  flg_INITIALIZED_ALREADY = true;                           // all below is done ONCE only 
-       int friends_max = sizeof(FRIENDS) / sizeof(FRIENDS[0]);   // calculate amount of friends (dynamic array)  
-       if (gl_CURR_FRIEND < 0 || gl_CURR_FRIEND > friends_max-1) {gl_CURR_FRIEND = random(friends_max); }                     
-       MESSAGES =  "{\"role\": \"system\", \"content\": \"";  
+    Serial.println( ">> MESSAGES LENGTH: " + (String) MESSAGES.length() );   
+    Serial.println( ">> FREE HEAP: " + (String) ESP.getFreeHeap() );             
+}
 
-       MESSAGES += FRIENDS[gl_CURR_FRIEND].prompt;     
-       MESSAGES += sysBuildInfoPrompt(); 
-
-       MESSAGES += "\"}";        
-       // ## NEW since Sept. 2025 update:
-       // Starting NTP server in background to update system time (so we don't waste latency in case we ever send Chat via EMAIL)
-       configTime(0, 0, "pool.ntp.org");     // starting UDP protocol with NTP server in background (using UTC timezone)
-    }
-
-    // --- BUILT-IN command: '#' lists complete CHAT history !       
-    if (UserRequest == "#")                                          
-    {  Serial.println( "\n>> MESSAGES (CHAT PROMPT LOG):" );    
-       Serial.println( MESSAGES );    
-       Serial.println( ">> MESSAGES LENGTH: " + (String) MESSAGES.length() );   
-       Serial.println( ">> FREE HEAP: " + (String) ESP.getFreeHeap() );                
-       return("OK");  // Done. leave. Simulating an 'OK' as LLM answer -> will be spoken in main.ini (TTS)
-    }        
-      
+// Hàm này giờ chỉ có chức năng gửi, các vấn đề append prompt dùng qua hàm LLM_Append()
+String OpenAI_Groq_LLM( const char* llm_open_key, bool flg_WebSearch, const char* llm_groq_key )
+{   
     // =====- Prep work done. Now CONNECT to Open AI or Groq Server (on INIT or after closed or lost connection) ================
 
     uint32_t t_start = millis(); 
@@ -86,29 +57,13 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     String Feedback = "";                                             // used for extracted answer
     String LLM_server, LLM_entrypoint, LLM_model, LLM_key;            // NEW: using vars to be independet of server/models
     
-    /* Some take aways & experiences from own tests / testing other models with OpenAI or Groq server
-    // General rule: Total latency = Connect Latency (always 0.8 sec) + Model 'Response' latency. Typical 'Response' latencies:
-    // - Open AI models:      gpt-4.1-nano (1.6 sec), gpt-4o-mini-search-preview (4.0 sec / IMO: still ok for a web search) 
-    // - Groq models e.g.:    llama-3.1-8b-instant (0.5 sec!, low costs), gemma2-9b-it (0.5 sec), qwen/qwen3-32b (1.2 sec)
-    // - IMO not recommended: deepseek-r1-distill-llama-70b (1.2 sec), qwen/qwen3-32b (1.2 sec) bc. both send Reasoning (<think>)
-    //                        compound-beta-mini (2-3 sec) with realtime! (BUT less predictable than OpenAI web search) */
-
-    // Define YOUR preferred models here:
-
-    if (llm_groq_key == "" || flg_WebSearch)                          // using #OPEN AI# only for web search (or if no GROQ Key)
-    {  LLM_server =        "api.openai.com";                          // OpenAI: https://platform.openai.com/docs/pricing
-       LLM_entrypoint =    "/v1/chat/completions";           
-       if (!flg_WebSearch) LLM_model= "gpt-4.1-nano";                 // low cost, powerful, fast (response latency ~ 1.5 sec)  
-       if (flg_WebSearch)  LLM_model= "gpt-4o-mini-search-preview";   // realtime websearch model (higher latency ~ 3-5 sec)     
-       LLM_key =           llm_open_key;
-    }  
-    else
-    {  LLM_server =        "api.groq.com";                            // Chat DEFAULT: using #CROG# with fastest llame model
-       LLM_entrypoint =    "/openai/v1/chat/completions";             // GROQ Models/Pricing: https://groq.com/pricing
-       LLM_model =         "llama-3.1-8b-instant";                    // low cost, very FAST (response latency ~ 0.5-1 sec !)  
-       LLM_key =           llm_groq_key;
-    }
-     
+    // Dùng LLM của OpenAI
+    LLM_server =        "api.openai.com";                          // OpenAI: https://platform.openai.com/docs/pricing
+    LLM_entrypoint =    "/v1/chat/completions";           
+    if (!flg_WebSearch) LLM_model= "gpt-4.1-nano";                 // low cost, powerful, fast (response latency ~ 1.5 sec)  
+    if (flg_WebSearch)  LLM_model= "gpt-4o-mini-search-preview";   // realtime websearch model (higher latency ~ 3-5 sec)     
+    LLM_key =           llm_open_key;
+    
     /*static*/ WiFiClientSecure client_tcp;    // [UPDATE]: removed static to free up HEAP (start with new LLM socket always)
     
     if ( !client_tcp.connected() )
@@ -135,26 +90,23 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     //
     // for better readiability we write # instead \" and replace below in code:
 
-    String request_Prefix, request_Content, request_Postfix, request_LEN;
+    String request_Prefix, request_Postfix, request_LEN;
 
-    UserRequest.replace( "\"", "\\\"" );  // to avoid any ERROR (if user enters any " -> convert to 2 \")
-    
     request_Prefix  =     "{#model#:#" + LLM_model + "#, #messages#:[";    // appending old MESSAGES       
-    request_Content =     ",\n{#role#: #user#, #content#: #" + UserRequest + "#}],\n";     // <-- here we send UserRequest
     
     if (!flg_WebSearch)   // DEFAULT parameter for classic CHAT completion models                                     
-    {  request_Postfix =  "#temperature#:0.7, #max_tokens#:512, #presence_penalty#:0.6, #top_p#:1.0}";                                           
+    {  request_Postfix =  "],\n#temperature#:0.7, #max_tokens#:512, #presence_penalty#:0.6, #top_p#:1.0}";                                           
     }
     if (flg_WebSearch)    // NEW: parameter for web search models
-    {  request_Postfix =  "#response_format#: {#type#: #text#}, "; 
+    {  request_Postfix =  "],\n#response_format#: {#type#: #text#}, "; 
        request_Postfix += "#web_search_options#: {#search_context_size#: #low#, ";
        request_Postfix += "#user_location#: {#type#: #approximate#, #approximate#: ";
        request_Postfix += "{#country#: ##, #city#: #" + (String) WEB_SEARCH_USER_CITY + "#}}}, ";
        request_Postfix += "#store#: false}";
     }  
     
-    request_Prefix.replace("#", "\"");  request_Content.replace("#", "\"");  request_Postfix.replace("#", "\"");          
-    request_LEN = (String) (MESSAGES.length() + request_Prefix.length() + request_Content.length() + request_Postfix.length()); 
+    request_Prefix.replace("#", "\"");  request_Postfix.replace("#", "\"");          
+    request_LEN = (String) (MESSAGES.length() + request_Prefix.length() + request_Postfix.length()); 
 
  
     // ------ Sending the request: ----------------------------------------------------------------------------------------------
@@ -183,7 +135,7 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
     }
 
     // final Postfix (then all is done):
-    client_tcp.println( request_Content + request_Postfix );    
+    client_tcp.println( request_Postfix );    
                  
     
     // ------ Waiting the server response: --------------------------------------------------------------------------------------
@@ -226,28 +178,33 @@ String OpenAI_Groq_LLM( String UserRequest, const char* llm_open_key, bool flg_W
       }            
 
       // 06/01: tách MEM
-      pos_mem = LLM_Response.indexOf("[MEM]", pos_start + strlen("\"content\":"));
+      pos_mem = LLM_Response.indexOf("[MEM]", pos_start);
       if (pos_mem == -1) pos_mem = SYSINT_PINF; // đặt thành số cực lớn để tránh lỗi tách bậy
     }                           
     if( pos_start > 0 && (pos_end > pos_start) )
     { 
       // 06/01: lấy pos_mem nếu có, còn không thì mặc định pos_end
-      Feedback = LLM_Response.substring(pos_start,pos_mem < pos_end ? pos_mem : pos_end);  // store cleaned response into String 'Feedback'   
+      Feedback = LLM_Response.substring(pos_start, pos_mem < pos_end ? pos_mem : pos_end);  // store cleaned response into String 'Feedback'   
 
       Feedback.trim();     
     }
 
     
     // ------ APPEND current I/O chat (UserRequest & Feedback) at end of var MESSAGES -------------------------------------------
-     
+    // Chèn vào lịch sử MESSAGES
+
     if (Feedback != "")                                          // we always add both after success (never if error) 
-    { String NewMessagePair = ",\n\n";                           // ## NEW in Sept. 2025: \n\n instead \n (for spaces in email)  
-      if(MESSAGES == "") { NewMessagePair = ""; }                // if messages empty we remove leading ,\n  
-      NewMessagePair += "{\"role\": \"user\", \"content\": \""      + UserRequest + "\"},\n"; 
-      NewMessagePair += "{\"role\": \"assistant\", \"content\": \"" + Feedback    + "\"}"; 
+    { 
+      // String NewMessagePair = ",\n\n";                           // ## NEW in Sept. 2025: \n\n instead \n (for spaces in email)  
+      // if(MESSAGES == "") { NewMessagePair = ""; }                // if messages empty we remove leading ,\n  
+      // NewMessagePair += "{\"role\": \"user\", \"content\": \""      + UserRequest + "\"},\n"; 
+      // NewMessagePair += "{\"role\": \"assistant\", \"content\": \"" + Feedback    + "\"}"; 
       
+      // newft1: thay bằng hàm LLM_Append
+      LLM_Append(RSTR_ASSISTANT, Feedback); // phản hồi chiều lại luôn là assistant
+
       // here we construct the CHAT history, APPENDING current dialog to LARGE String MESSAGES
-      MESSAGES += NewMessagePair;       
+      // MESSAGES += NewMessagePair;       
     }  
 
              

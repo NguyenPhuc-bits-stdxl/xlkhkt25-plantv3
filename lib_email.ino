@@ -17,6 +17,9 @@ void emlInit()
 
 void emlStart()
 {
+    // sync time
+    sysSyncNTP();
+
     // Clear lại object trước khi làm cái gì nha, vì có thể còn dữ liệu cũ từ mail trước, do đang đặt globalscope
     msg = SMTPMessage();
     bodyText = "";
@@ -49,7 +52,7 @@ void emlBodyUncomfortable(String smsg, int slight, float stemp, float shumid, in
 {
     // Fallback text
     bodyText += "Bạn ơi, tớ đang cảm thấy khó chịu!\n";
-    bodyText += sysGetSensorsString();
+    //bodyText += sysGetSensorsString();
 
     // HTML Content
     bodyHtml += "<div style=\"max-width:600px;margin:0 auto;padding:0 20px;color:#333;\">";
@@ -130,11 +133,10 @@ void emlFinalize() {
     msg.html.body(bodyHtml);
     
     // Lấy timestamp
-    Serial.println("GET timestamp via NTP Pool");
-    configTime(0, 0, "pool.ntp.org");
-    while (time(nullptr) < 100000) delay(100);
-    msg.timestamp = time(nullptr);
-    Serial.println("GET timestamp done!");
+    // Serial.println("GET timestamp via NTP Pool");
+    // configTime(7 * 3600, 0, "pool.ntp.org");
+    // msg.timestamp = time(nullptr);
+    // Serial.println("GET timestamp done!");
 
     // Check định dạng email người nhận
     if (RECIPIENT_EMAIL == "") {

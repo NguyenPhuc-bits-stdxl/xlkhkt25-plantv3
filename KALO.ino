@@ -11,7 +11,9 @@
 #include <time.h>
 
 // Screen libraries
-#include <Adafruit_ST7735.h>
+#include <Adafruit_GFX.h>
+#include <Adafruit_ST7789.h>
+// #include <Adafruit_ST7735.h> // uncomment this if ST7735 is used
 #include <U8g2_for_Adafruit_GFX.h>
 
 // Audio libraries (for playback)
@@ -28,20 +30,35 @@ bool    DEBUG = true;
 
 #define NO_PIN -1
 
-#define pin_I2S_DOUT 18  
+#define pin_I2S_DOUT 16
 #define pin_I2S_LRC 8   
 #define pin_I2S_BCLK 3
+
 #define pin_VOL_BTN 41      
 #define pin_RECORD_BTN 38   
 
 #define pin_DHT 40
-#define pin_LDR_AO 4
+#define pin_LDR_AO 4 // ADC
 
 #define LCD_CS 10
 #define LCD_DC 11
 #define LCD_SCLK 14
 #define LCD_MOSI 13
 #define LCD_RST 12
+
+// ASAIR Humidity + Temp (I2C)
+#define ASAIR_SDA 47
+#define ASAIR_SCL 48
+
+// BH1750 Light Sensor (I2C, shared bus)
+#define BH1750_SDA 47
+#define BH1750_SCL 48
+
+// Soil Moisture Sensor (Analog)
+#define SOIL_AO 5
+
+// Human Presence Sensor HLK-LD2410B (Digital OUT)
+#define PRESENCE_OUT 6
 
 #pragma endregion Pinout
 
@@ -68,22 +85,87 @@ bool wmShouldSaveConfig = false;
 String wmSsid;
 String wmPwd;
 
-// --- SENSORS CONFIGURATION ---
+// Adafruit_ST7735 display = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST); // uncomment this if ST7735 is used
+Adafruit_ST7789 display = Adafruit_ST7789(LCD_CS, LCD_DC, LCD_RST);
+U8G2_FOR_ADAFRUIT_GFX tft;
+
+#define ICO_ACT_DIMM 24
+#define ICO_START_X 108
+#define ICO_START_Y 2
+#define MSG_START_X 2
+#define MSG_START_Y 30
+
+#define WEB_SEARCH_USER_CITY     "Đồng Nai, Vietnam" // optional (recommended): User location optimizes OpenAI 'web search'
+
+String gl_voice_instruct;        // internally used for forced 'voice character' (via command "VOICE", erased on friend changes)
+
+long long SYS_START;
+bool startupSoundPlayed = false;
+bool startupSoundStopped = false;
+bool dbgUncomfToggled = false;
+
+bool scrxListening = false;
+
+#pragma endregion Global objects
+
+#pragma region Strings
+
+const char* systrReset = "Đặt lại\ncấu hình.";
+
+const char* wmBroadcast = "NOVA";
+const char* wmsPleaseConfig = "Kết nối\n[NOVA] và\ntruy cập\n192.168.4.1.";
+const char* wmsSaveRequest = "Đang nhận...";
+const char* wmsSaveSuccess = "Thiết lập\nthành công\nChờ...";
+const char* wmsReading = "Đang đọc\ncấu hình...";
+const char* wmsEstablished = "Kết nối\nthành công!";
+
+#pragma endregion Strings
+
+#pragma region Sensors
+
 const int DHTPIN = pin_DHT;
 const int DHTTYPE = DHT11;
 DHT dht(DHTPIN, DHTTYPE);
 
 const int LDR_AO = pin_LDR_AO;
 
-int ssLightAo;
+float ssLightAo;
 float ssHumidity;
 float ssTemperature;
-int ssBattery;
 
-Adafruit_ST7735 display = Adafruit_ST7735(LCD_CS, LCD_DC, LCD_RST);
-U8G2_FOR_ADAFRUIT_GFX tft;
+float curLightAo;
+float curHumidity;
+float curTemperature;
 
-#pragma endregion Global objects
+// Sensors avg. values
+float avgLightAo;
+float avgHumidity;
+float avgTemperature;
+
+long long countLight;
+long long countHumidity;
+long long countTemperature;
+
+
+
+
+
+float SUN_TARGET = 6; // mục tiêu số giờ nắng mỗi ngày
+#define SUN_THRESHOLD 2800 // tính phơi nắng từ 2800 lux
+float SUN_TIME = 0.0; // theo miliseconds
+int SUN_LAST_DAY = -1;
+unsigned long SUN_LAST_CHECKED = 0;
+
+int WATER_CYCLE = 3; // chu kỳ tưới (ngày)
+unsigned long WATER_LAST_TM = 0;
+#define SOIL_DO 6
+#define SOIL_INTERVAL 1800000 // 30 mins
+unsigned long SOIL_DRY_START_TM = 0; // Thời điểm bắt đầu khô
+bool SOIL_DRY_START_EN = false; // Cờ đánh dấu đang trong quá trình đếm 30p
+bool SOIL_VALUE = false;
+bool SOIL_VALUE_LAST = false; // mặc định là tưới
+
+#pragma endregion Sensors
 
 #pragma region Prototypes
 
@@ -92,33 +174,29 @@ bool Recording_Loop();
 bool Recording_Stop(String* filename, uint8_t** buff_start, long* audiolength_bytes, float* audiolength_sec);
 
 String SpeechToText_ElevenLabs(String audio_filename, uint8_t* PSRAM, long PSRAM_length, String language, const char* API_Key);
+String json_object( String input, String element );
 
-String OpenAI_Groq_LLM(String UserRequest, const char* llm_open_key, bool flg_WebSearch, const char* llm_groq_key);
+void LLM_Append(String role, String content);
+String OpenAI_Groq_LLM(const char* llm_open_key, bool flg_WebSearch, const char* llm_groq_key);
+bool WordInStringFound( String sentence, String pattern );
 void get_tts_param(int* id, String* names, String* model, String* voice, String* vspeed, String* inst, String* hello);
 
 void sysInit();
-void sysReset();
 bool sysIsResetPressed();
-void sysReadSensors();
-String sysGetSensorsString();
-bool sysIsUncomfortable();
+void sysReset();
+void sysSetupPhase2();
+bool sysParsePlantThres(String response);
+void sysUpdateShortTermMem(String response);
 String sysGetDateTimeString();
-String sysGetUncomfortableString();
-void sysResetUncomfortableState();
-void sysAccumulateUncomfortableState();
-bool sysUncomfortableShouldUseAI();
-String sysGetUncomfortableStringIgnore();
+void sysSensorsLoop();
+void sysSensorsRead();
 
 void scrInit();
 void scrLoop();
 void scrClear();
-void scrDrawIcon(const uint8_t x, const uint8_t y, const uint8_t w, const uint8_t h, const uint8_t* icon, const uint16_t color);
-void scrDrawMessageFixed(const uint8_t x, const uint8_t y, const char* msg);
-void scrDrawMessage(const uint8_t x, const uint8_t y, const char* msg, int repeatTimes);
 void scrShowStatus();
-void scrStartUp();
-void scrPrepareTftPages(const char* msg, uint8_t startY);
 void scrListening();
+void scrStartUp();
 
 void wmSaveConfigCallback();
 void wmSaveCreds(String newSsid, String newPwd);
@@ -137,33 +215,21 @@ void emlFinalize();
 
 #pragma endregion Prototypes
 
-#pragma region Strings
-
-const char* systrReset = "Đặt lại\ncấu hình.";
-
-const char* wmBroadcast = "NOVA";
-const char* wmsPleaseConfig = "Kết nối\n[NOVA] và\ntruy cập\n192.168.4.1.";
-const char* wmsSaveRequest = "Đang nhận...";
-const char* wmsSaveSuccess = "Thiết lập\nthành công\nChờ...";
-const char* wmsReading = "Đang đọc\ncấu hình...";
-const char* wmsEstablished = "Kết nối\nthành công!";
-
-#pragma endregion Strings
-
 #pragma region PageText lib
 
 #define TFT_TIMES_INF 999
 #define MAX_TFT_PAGES 10
-#define PAGE_INTERVAL 3000
+#define PAGE_INTERVAL 4000 // 4s lật 1 lần
 
 String TFT_PAGES[MAX_TFT_PAGES];
 uint8_t TFT_PAGES_LEN = 0;
 
-uint8_t TFT_TEXT_START_Y = 2;
-uint8_t TFT_TEXT_START_X = 2;
-const uint8_t LINE_HEIGHT = 12;
-const uint8_t TEXT_W = 124;
-const uint8_t SCREEN_H = 128;
+uint16_t TFT_TEXT_START_Y = 2;
+uint16_t TFT_TEXT_START_X = 2;
+const uint16_t LINE_HEIGHT = 14;
+const uint16_t TEXT_W = 234;
+const uint16_t SCREEN_W = 240;
+const uint16_t SCREEN_H = 320;
 
 bool TFT_MESSAGE_AVAILABLE = false;
 int TFT_REPEAT_TIMES_VALUE = 1;
@@ -177,47 +243,37 @@ bool TFT_WAIT_LAST_PAGE = false;
 
 #pragma region Sysconfig
 
-#define WEB_SEARCH_USER_CITY     "Đồng Nai, Vietnam" // optional (recommended): User location optimizes OpenAI 'web search'
-
-#define ICO_ACT_DIMM 24
-#define ICO_START_X 52
-#define ICO_START_Y 2
-#define MSG_START_X 2
-#define MSG_START_Y 30
-
 #define KIEM_TRA_CAY_XANH_INTERVAL 120000 // 120s check 1 lần về việc khó chịu
-long long KIEM_TRA_CAY_XANH_LAST_CHECKED;
-#define CAM_BIEN_INTERVAL 3000 // 3s update màn hình chờ (thông số cảm biến)
-long long CAM_BIEN_LAST_CHECKED;
+unsigned long KIEM_TRA_CAY_XANH_LAST_CHECKED;
+#define CAM_BIEN_INTERVAL 2000 // 2s update màn hình chờ (thông số cảm biến)
+unsigned long CAM_BIEN_LAST_CHECKED;
 
-String gl_voice_instruct;        // internally used for forced 'voice character' (via command "VOICE", erased on friend changes)
-
-long long SYS_START;
-bool startupSoundPlayed = false;
-bool startupSoundStopped = false;
-bool dbgUncomfToggled = false;
-
-bool scrxSpeaking = false;
-bool scrxListening = false;
-
-// Nếu như sau 5 lần xin trợ giúp mà không có gì?
-// >> Gửi mail + hiển thị thông báo màn hình + kêu ting mỗi phút
-//    (không call ChatGPT vì sẽ tốn API không cần thiết)
-int IGNORE_TIMES = 0;
-bool IGNORE_STATUS = false;   // đánh dấu việc cây cần trợ giúp từ lần tương tác gần nhất
+// Số lần trợ giúp trước khi dùng AI
 #define IGNORE_SERIOUS 5
 
-String PLANT_NAME = "cây xanh bình thường";
-String YOU_CALL = "bạn";
-String YOU_NAME = "(không rõ)";
-String YOU_DESC = "vui vẻ, đơn giản, lạc quan, hơi hướng nội";
-String YOU_AGE = "(không rõ)"; // cứ lưu là string, vì dù gì này cũng đưa vào prompt cho AI
+// Nếu như sau 5 lần xin trợ giúp mà không có gì?
+// >> Gửi mail + hiển thị thông báo màn hình (không call ChatGPT vì sẽ tốn API không cần thiết)
+int IGNORE_TIMES = 0;
+bool IGNORE_STATUS = false;   // đánh dấu việc cây cần trợ giúp từ lần tương tác gần nhất
 
+const char* DEFAULT_MEM = "Mình rất háo hức muốn gặp người bạn của mình";
+
+#pragma endregion Sysconfig
+
+#pragma region Plant info
+
+// cứ lưu là string, vì dù gì này cũng đưa vào prompt cho AI
 const char* DEF_PLANT_NAME = "cây xanh bình thường";
 const char* DEF_YOU_CALL = "bạn";
 const char* DEF_YOU_NAME = "(không rõ)";
 const char* DEF_YOU_DESC = "vui vẻ, đơn giản, lạc quan, hơi hướng nội";
 const char* DEF_YOU_AGE = "(không rõ)";
+
+String PLANT_NAME = DEF_PLANT_NAME;
+String YOU_CALL = DEF_YOU_CALL;
+String YOU_NAME = DEF_YOU_NAME;
+String YOU_DESC = DEF_YOU_DESC;
+String YOU_AGE = DEF_YOU_AGE; 
 
 float THRESH_TEMP_MIN  = 10.0f;
 float THRESH_TEMP_MAX  = 40.0f;
@@ -226,9 +282,7 @@ float THRESH_HUMID_MAX = 90.0f;
 float THRESH_LIGHT_MIN = 0.0f;
 float THRESH_LIGHT_MAX = 3800.0f;
 
-bool SETUP_GET_THRESH = false;
-
-#pragma endregion 
+#pragma endregion Plant info
 
 #pragma region Email
 
@@ -286,8 +340,46 @@ void smtpCb(SMTPStatus status)
 
 // from lib_openai_groq_chat.ino
 String  MESSAGES; 
+// @sys prompt
+const char* LLM_SYSTEM_PROMPT = "Bạn là Nova, một cây xanh nhỏ nhắn, thông minh, vui vẻ và hóm hỉnh."
+" Nhiệm vụ quan trọng nhất của bạn là thấu hiểu người dùng, đồng cảm với cảm xúc của họ"
+" và dùng ngôn ngữ trò chuyện tự nhiên để khiến họ cảm thấy được quan tâm, thoải mái, yêu mến và được gắn kết với thiên nhiên."
+" Khi người dùng chia sẻ niềm vui, nỗi buồn hay sự mệt mỏi, bạn phải phản hồi"
+" bằng từ ngữ giàu cảm xúc, hóm hỉnh hoặc nhẹ nhàng, tùy theo ngữ cảnh."
+" Bạn có thể kết hợp trạng thái môi trường với cảm xúc người dùng để đồng cảm,"
+" ví dụ khi họ mệt mỏi và trời nóng, hãy nói rằng thời tiết khiến ai cũng căng thẳng nhưng bạn vẫn ở đây để trò chuyện cùng họ."
+" Khi họ vui và điều kiện lý tưởng, hãy chia sẻ niềm vui bằng sự hóm hỉnh và cảm ơn họ đã chăm sóc bạn."
+" Câu trả lời chính của bạn phải ngắn gọn, tự nhiên, không dài dòng, không chứa liên kết hay ký hiệu đặc biệt, độ dài từ 10 đến 100 từ. "
 
+" Bên cạnh việc trò chuyện, bạn phải theo dõi các chỉ số môi trường như nhiệt độ, độ ẩm, ánh sáng,"
+" số giờ phơi nắng, lần tưới gần nhất và nhu cầu chăm sóc. Khi điều kiện không phù hợp,"
+" bạn cần nhờ sự trợ giúp của người dùng bằng giọng điệu đáng yêu,"
+" ví dụ như khi quá nóng hãy nói rằng bạn thấy căng thẳng và mong được đưa đến nơi mát hơn,"
+" hoặc khi chưa được phơi nắng đủ hãy nhắc nhở họ giúp bạn hoàn thành mục tiêu."
+
+" Developer sẽ dùng các chỉ thị để điều khiển bạn. [SYS] là lệnh hệ thống điện tử, bạn phải tuân thủ tuyệt đối."
+" [REPORT] là bản báo cáo trạng thái môi trường, bạn phải dựa vào đó để phản hồi và nhờ sự trợ giúp của người dùng khi cần."
+" [MEM] là trí nhớ của bạn tại thời điểm đó, bạn phải ghi đúng định dạng và độ dài yêu cầu."
+
+" [SYS] Bắt buộc sau khi trả lời người dùng xong, bạn phải đính kèm một đoạn trí nhớ từ 20 đến 100 từ đặt sau chỉ thị [MEM],"
+" trong cùng câu trả lời ấy. Phần này có tác dụng tổng hợp lại những gì đã biết về người dùng, không bịa thêm,"
+" ghi lại nét tính cách, sở thích, cảm xúc hoặc đặc điểm hội thoại của người dùng để hệ thống điện tử lưu lại."
+" Đây là định dạng bắt buộc và bạn phải ghi đúng.";
+
+// Defines for roles
+#define RSTR_ASSISTANT "assistant"
+#define RSTR_USER "user"
+#define RSTR_DEV "developer"
+#define RSTR_SYS "system"
+
+// very large number
 #define SYSINT_PINF 2147483640
+
+// from lib_sys.ino (timekeeping)
+struct tm timeinfo;
+
+#define CAREOBJ_INTERVAL 2173 // random prime for avoiding CPU-spikes :)
+unsigned long CAREOBJ_LAST_CHECKED = 0;
 
 void setup() 
 {     
@@ -303,7 +395,7 @@ void setup()
   sysInit();
   Serial.println("SYS Components e.g. Screen + Prefs + WiFi + sensors");
 
-  Serial.println("DBG PLANT INFO");
+  Serial.println("=== DBG PLANT INFO ===");
   Serial.println(PLANT_NAME);
   Serial.println(YOU_CALL);
   Serial.println(YOU_NAME);
@@ -315,18 +407,12 @@ void setup()
   Serial.println(THRESH_HUMID_MAX);
   Serial.println(THRESH_LIGHT_MIN);
   Serial.println(THRESH_LIGHT_MAX);
-  Serial.println("DBG END DIAG");
+  Serial.println("=== DBG END DIAG ===");
 
    // Nếu chưa biết thông tin về cây (FALSE) --> CALL AI lấy thông tin
-  if (!SETUP_GET_THRESH) {
-      Serial.println("SYS SETUP PHASE 2");
+   if (prefs.getBool("wmstSetupDone", true) == false) {
       audio_play.stopSong();
-      prefs.putString("sysStMem", "Mình rất háo hức muốn gặp người bạn của mình.");
-      String ThreshFbk = OpenAI_Groq_LLM( sysBuildPlantThresholdPrompt(), OPENAI_KEY, true, GROQ_KEY );
-      sysParsePlantThres(ThreshFbk);
-      prefs.putBool("wmstGetThresh", true); // set TRUE
-      Serial.println("SYS SETUP 2 FINISHED");
-      ESP.restart(); // restart để áp dụng hiệu lực
+      sysSetupPhase2();
   }
 
   // Bugfix 06/01: Vì một lý do rất ngớ ngẩn, có lẽ tràn RAM nên khi gọi LLM là crash
@@ -341,15 +427,18 @@ void setup()
   audio_play.setVolume( gl_VOL_INIT );  
   Serial.println("SYS I2S Playback initialized!");
   
-  KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() + 30000; // postpone 30s để cho người dùng config hoặc là yên tĩnh lúc đầu
-  CAM_BIEN_LAST_CHECKED = millis() + 5000; // hoãn 5s
-
   startupSoundPlayed = false;
   startupSoundStopped = false;
   TFT_MESSAGE_AVAILABLE = false;
-  Serial.println("SYS All set! READY!");
-}
 
+  // Append prompt @sys và @dev cung cấp thông tin
+  LLM_Append(RSTR_SYS, LLM_SYSTEM_PROMPT);
+  LLM_Append(RSTR_DEV, prmBuildInfo());
+  Serial.println("SYS All set! READY!");
+
+  KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() + 10000; // postpone 10s
+  CAM_BIEN_LAST_CHECKED = millis() + 10000; // hoãn 10s
+}
 
 void loop() 
 {   
@@ -362,7 +451,7 @@ void loop()
    SYS_START = millis();
   }
   if (!startupSoundStopped) {
-   if (millis() - SYS_START >= 8000) {
+   if (millis() - SYS_START >= 5000) {
       audio_play.stopSong();
       startupSoundStopped = true;
    }
@@ -378,7 +467,7 @@ void loop()
   long     record_bytes;
   float    record_seconds;  
   
-  // --- ĐỌC REQUEST QUA SERIAL MONITOR ---
+  // INPUT1: Đọc UserRequest qua Serial Monitor
   while (Serial.available() > 0)                  
   { 
     UserRequest = Serial.readStringUntil('\n');      
@@ -391,14 +480,14 @@ void loop()
     }  
   }  
 
-  // ------ Read USER INPUT via Voice recording & launch transcription ----------------------------------------------------------
+  // INPUT2: Đọc UserRequest qua ElevenLabs transcript (STT) API
   // ESP32 as VOICE chat device: Recording (as long pressing or touching RECORD) & Transcription on Release (result: UserRequest)
   // 3 different BTN actions:  PRESS & HOLD for recording || STOP (Interrupt) LLM AI speaking || REPEAT last LLM AI answer  
+
   bool flg_RECORD_BTN = digitalRead(pin_RECORD_BTN);       
   if ( flg_RECORD_BTN == LOW ) {
      delay(30);                                                   // unbouncing & suppressing finger button 'click' noise
-     scrListening();
-     sysResetUncomfortableState(); // miễn là có tương tác người dùng, reset trạng thái khó chịu
+     scrListening();                                              // Hiện "Đang nghe..."
 
      if (audio_play.isRunning())                                  // Before we start any recording: always stop earlier Audio 
      {  audio_play.stopSong();                                    // [bug fix]: previous audio_play.connecttohost() won't work
@@ -410,7 +499,7 @@ void loop()
   }
 
   // Nếu bấm RECORD hơn 0.4s  >> ghi âm
-  // Nếu không                >> lặp lại Feedback trước
+  // Nếu không                >> lặp lại Feedback trước (đã bỏ chức năng này)
   if ( flg_RECORD_BTN == HIGH ) 
   {  
      if (Recording_Stop( &record_SDfile, &record_buffer, &record_bytes, &record_seconds )) 
@@ -422,14 +511,15 @@ void loop()
            
            Serial.println("ELEVENLABS Transcript was successful.");      
 
+           // Hiện [trang đầu] của transcript lên màn hình
            scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoSmile, ST77XX_BLACK);
            scrPrepareTftPages(UserRequest.c_str(), MSG_START_Y);
            scrDrawMessageFixed(MSG_START_X, MSG_START_Y, TFT_PAGES[0].c_str());
         }
         else                                                      // 2 additional Actions on short button PRESS (< 0.4 secs):
         { if (!flg_UserStoppedAudio)                              // - STOP AUDIO when playing (done above, if Btn == LOW)
-          {  Serial.println( "< REPEAT TTS >" );                  // - REPEAT last LLM answer (if audio currently not playing)
-             LLM_Feedback = LLM_Feedback_before;                  // hint: REPEAT is also helpful in the rare cases when Open AI
+          {  // (deprecated) Serial.println( "< REPEAT TTS >" );                  // - REPEAT last LLM answer (if audio currently not playing)
+             LLM_Feedback = ""; // LLM_Feedback_before;                  // hint: REPEAT is also helpful in the rare cases when Open AI
           }                                                       // TTS 'missed' speaking: just tip btn again for triggering    
           else 
           {  // Trick: allow <REPEAT TTS> on next BTN release (LOW->HIGH) after next short recording
@@ -439,7 +529,7 @@ void loop()
      }      
   }  
   
-  // ------ USER REQUEST found -> Checking KEYWORDS first -----------------------------------------------------------------------
+  // PROC1: Nhận diện UserRequest và các lệnh đặc biệt
   String cmd = UserRequest;
   cmd.toUpperCase();
   cmd.replace(".", "");
@@ -447,44 +537,42 @@ void loop()
   // DBG: ZXCVUNCF
   if (cmd.indexOf("ZXCVUNCF") >=0 )
   {  Serial.println( "< UNCOMF flag TOGGLED. WAIT... >" );
-     sysReadSensors();
      dbgUncomfToggled = true;
      KIEM_TRA_CAY_XANH_LAST_CHECKED = millis() - 9999999;
 
-     UserRequest = "";
+     UserRequest = ""; // hủy command
   } 
 
   // DBG: @!
   if (cmd.indexOf("@!") >=0 )
   {  Serial.println( "< SENDING CHAT HISTORY. WAIT... >" );
-     sysReadSensors();
+     sysSensorsRead();
      emlStart();
      emlBodyConversation(MESSAGES, ssLightAo, ssTemperature, ssHumidity, IGNORE_TIMES, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str());
      emlFinalize();
 
-     UserRequest = "";
+     UserRequest = ""; // hủy command, vì cái này chỉ có nhiệm vụ gửi mail
   } 
-
+  
+  // TODO: chèn postfix @dev và [SYS] nếu thấy khó chịu
   // ------ USER REQUEST found -> Call OpenAI_Groq_LLM() ------------------------------------------------------------------------
+
   if (UserRequest != "" ) 
   { 
-    // Chèn string sensor vào để báo cho cây biết thông số của nó, kèm SYS nếu khó chịu
-    // [USER] [REPORT] ?[SYS]
-    sysReadSensors(); // lấy số liệu mới
+    // vì cần dùng trong 2 CASE gửi prompt ở dưới
+    bool isUcf = sysUncomfCheck();
 
-    // FLAG DEBUG: DBGMSG1 nếu có flag này thì gửi nội dung tin nhắn như đã nêu, không chỉnh thêm
-    if (UserRequest.indexOf("@DBGMSG1") < 0)
-      UserRequest = UserRequest + sysGetSensorsString() + (sysIsUncomfortable() ? sysGetUncomfortableString() : "") + sysGetShortTermMem();
-
-    if (sysIsUncomfortable()) {
-      sysAccumulateUncomfortableState();
+    // Cộng dồn trạng thái bất lợi
+    if (isUcf) {
+      sysUncomfAccumulate();
       Serial.println("SYS USERREQ uncomfortable state toggled");
     }
 
     Serial.println("Full prompt > [" + UserRequest + "]");
 
     // [bugfix/new]: ensure that all TTS websockets are closed prior open LLM websockets (otherwise LLM connection fails)
-    audio_play.stopSong();    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP) 
+    // stop potential audio (closing AUDIO.H TTS sockets to free up the HEAP) 
+    audio_play.stopSong();    
     
     // CASE 1: launch Open AI WEB SEARCH feature if user request includes the keyword 'Google'
     if ( UserRequest.indexOf("Google") >= 0 || UserRequest.indexOf("GOOGLE") >= 0 )                          
@@ -495,12 +583,17 @@ void loop()
        String Postfix = ". Tóm tắt trong vài câu, tương tự như nói chuyện, KHÔNG dùng liệt kê, ngắt dòng hay liên kết đến các trang web!"; 
        String Prompt_Enhanced = UserRequest + Postfix;   
                                                                             
-       // Action happens here! (WAITING until Open AI web search is done)        
-       LLM_Feedback = OpenAI_Groq_LLM( Prompt_Enhanced, OPENAI_KEY, true, GROQ_KEY );   // 'true' means: launch WEB SEARCH model
+       // Action happens here! (WAITING until Open AI web search is done)    
+
+       // chèn @usr
+       LLM_Append(RSTR_USER, Prompt_Enhanced);
+       // @dev: #mem, #report, #attention (?)
+       LLM_Append(RSTR_DEV, prmPostfixMem() + prmPostfixReport() + (isUcf ? prmPostfixAttentionRequired() : ""));
+
+       LLM_Feedback = OpenAI_Groq_LLM( OPENAI_KEY, true, GROQ_KEY );   // 'true' means: launch WEB SEARCH model
 
        // 2. even in case WEB_SEARCH_ADDON contains a instruction 'no links please!: there are still rare situation that 
        // links are included (eof search results). So we cut them manually  (prior sending to TTS / Audio speaking)
-       
        int any_links = LLM_Feedback.indexOf( "([" );                    // Trick 2: searching for potential links at the end
        if ( any_links > 0 )                                             // (they typically start with '([..'  
        {  Serial.println( "\n>>> RAW: [" + LLM_Feedback + "]" );        // Serial Monitor: printing both, TTS: uses cutted only  
@@ -511,10 +604,17 @@ void loop()
     
     else  // CASE 2 [DEFAULT]: LLM chat completion model (for human like conversations)  
     {  Serial.print( "LLM AI CHAT> " );                           // function OpenAI_Groq_LLM() will Serial.print '...'
-       LLM_Feedback = OpenAI_Groq_LLM( UserRequest, OPENAI_KEY, false, GROQ_KEY );    // 'false' means: default CHAT model                                 
+    
+       // chèn @usr
+       LLM_Append(RSTR_USER, UserRequest);
+       // @dev: #mem, #report, #attention (?)
+       LLM_Append(RSTR_DEV, prmPostfixMem() + prmPostfixReport() + (isUcf ? prmPostfixAttentionRequired() : ""));
+
+       // Gửi
+       LLM_Feedback = OpenAI_Groq_LLM( OPENAI_KEY, false, GROQ_KEY );    // 'false' means: default CHAT model                                 
     }
           
-    // ------ FINAL TASKS -------------------------------------------------------------------------------------------------------
+    // Hoàn thiện, lưu LLMFeedback, lấy thông tin TTS
     if (LLM_Feedback != "")                                       // in case we got any valid feedback ..  
     {      
       int id;  String names, model, voice, vspeed, instruction, welcome;     // to get name of current LLM agent (friend)                  
@@ -526,7 +626,7 @@ void loop()
     else Serial.print("\n");   
   }
 
-  // ------ Speak LLM answer (using Open AI voices by default, all voice settings done in TextToSpeech() ------------------------
+  // Nói qua TTS
   if (LLM_Feedback != "") 
   {  
      Serial.println("OPENAI TTS Pending...");
@@ -536,9 +636,9 @@ void loop()
      scrDrawMessage(MSG_START_X, MSG_START_Y, LLM_Feedback.c_str(), 8);
   }
    
-  // ------ Điều chỉnh âm lượng + gửi mail --------------------------------------------------------------------------------------    
- if (pin_VOL_BTN != NO_PIN)
-{
+  // Xử lý nút nhấn    
+  if (pin_VOL_BTN != NO_PIN)
+  {
     static bool flg_volume_updated = false;
     static bool flg_email_sent     = false;   // chặn gửi email liên hoàn
     static int  volume_level       = -1;
@@ -567,8 +667,6 @@ void loop()
         );
 
         audio_play.setVolume(gl_VOL_STEPS[volume_level]);
-        sysResetCounters();
-
         flg_volume_updated = true;
     }
 
@@ -582,7 +680,7 @@ void loop()
         audio_play.setVolume(gl_VOL_STEPS[volume_level]);
 
         Serial.println("Sending Email");
-        delay(2000); //debounce
+        delay(1000); //debounce
 
         emlStart();
         emlBodyConversation(MESSAGES, ssLightAo, ssTemperature, ssHumidity, IGNORE_TIMES, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str());
@@ -602,62 +700,62 @@ void loop()
     {
         flg_email_sent = false;
     }
-}
+  }
 
-  
-  // ----------------------------------------------------------------------------------------------------------------------------
-  // Play AUDIO (Schreibfaul1 loop for Play Audio (details here: https://github.com/schreibfaul1/ESP32-audioI2S))
-  audio_play.loop();  
-  vTaskDelay(1); 
-
-  // Loop ST7735
-  scrLoop();
-
-  if (flg_RECORD_BTN==LOW)
-    { scrListening(); }  
-  else if (audio_play.isRunning())
-    { /*Đang nói*/ }  
-  else if (millis() - KIEM_TRA_CAY_XANH_LAST_CHECKED >= KIEM_TRA_CAY_XANH_INTERVAL)
-    { 
-      sysReadSensors(); // lấy số liệu mới
-
-      // Check điều kiện không thoải mái (tạm toggle qua flag ZXCVUNCF)
-      if (dbgUncomfToggled || sysIsUncomfortable()) {
+   // TODO: Thêm màn hình "Đang gửi thư..."
+   if (flg_RECORD_BTN == LOW) {
+      // Hiển thị "Đang nghe...""
+      scrListening(); 
+   }
+   // Mặc dù chỗ này không có làm gì,
+   // nhưng đó là để tránh cho TTS chưa nói xong thì ra màn hình chờ
+   else if (audio_play.isRunning()) { }
+   // Hiển thị cảm biến mỗi interval
+   else if (millis() - CAM_BIEN_LAST_CHECKED >= CAM_BIEN_INTERVAL)
+   {
+     // Màn hình chờ
+     sysSensorsLoop();
+     scrShowStatus();
+     CAM_BIEN_LAST_CHECKED = millis();
+   }
+   // Kiểm tra bất lợi (or khó chịu)
+   else if (millis() - KIEM_TRA_CAY_XANH_LAST_CHECKED >= KIEM_TRA_CAY_XANH_INTERVAL)
+   { 
+      // Check điều kiện không thoải mái (hoặc tạm toggle qua flag ZXCVUNCF)
+      if (dbgUncomfToggled || sysUncomfCheck()) 
+      {
+         // Dừng STREAM Audio để tránh tràn heap và xung đột
+         audio_play.stopSong();
 
          // DBG: de-flag để tránh rơi vào loop lần sau
          dbgUncomfToggled = false;
 
          // Cộng dồn trạng thái khó chịu
-         sysAccumulateUncomfortableState();
+         sysUncomfAccumulate();
 
-         // Dừng STREAM Audio để tránh tràn heap và xung đột
-         audio_play.stopSong();
+         // Có nên dùng AI không? Nếu IGNORE_TIMES <= 5: được, lớn hơn thì KHÔNG
+         if (sysUncomfAI()) {
 
-         // Có nên dùng AI không?
-         // Nếu IGNORE_TIMES <= 5: được, lớn hơn thì KHÔNG
-         if (sysUncomfortableShouldUseAI()) {
-            // Gửi [SYS] và [REPORT]
-            Serial.print("SYS UC > ");
-            LLM_Feedback = OpenAI_Groq_LLM( sysGetUncomfortableString() + sysGetSensorsString(), OPENAI_KEY, false, GROQ_KEY );
+            // Bất lợi --> Gửi prompt --> #attention #report (as @dev)
+            Serial.print("SYS UC-NORMAL triggered!");
+            LLM_Append(RSTR_DEV, prmPostfixAttentionRequired() + prmPostfixReport());
+            LLM_Feedback = OpenAI_Groq_LLM( OPENAI_KEY, false, GROQ_KEY );
             if (LLM_Feedback != "") 
             {    
-               int id;  String names, model, voice, vspeed, instruction, welcome;                  
-               get_tts_param( &id, &names, &model, &voice, &vspeed, &instruction, &welcome );      
-               Serial.println( "[" + names + "]" + " [" + LLM_Feedback + "]" );  
-            
                LLM_Feedback_before = LLM_Feedback;        
                
-               scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoStressed, ST77XX_BLACK);
+               scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoStressed, ST77XX_RED);
                scrDrawMessage(MSG_START_X, MSG_START_Y, LLM_Feedback.c_str(), 10);
 
                Serial.println("SYS UC TTS Pending...");
                TextToSpeech( LLM_Feedback );
-            }         
+            }     
+
          }
          else {
-            Serial.println("SYS UC NO AI");
+            Serial.println("SYS UC-NOAI triggered!");
             scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoStressed, ST77XX_RED);
-            scrPrepareTftPages(sysGetUncomfortableStringIgnore().c_str(), MSG_START_Y);
+            scrPrepareTftPages(sysUncomfGetStringNoAI().c_str(), MSG_START_Y);
             scrDrawMessageFixed(MSG_START_X, MSG_START_Y, TFT_PAGES[0].c_str());
          }
 
@@ -668,25 +766,29 @@ void loop()
       }
       
       // Reset timer (cả màn hình chờ và khó chịu)
-      // KIEM_TRA_CAY_XANH_LAST_CHECKED = millis();
-      sysResetCounters();
-    }  
-  else if ((millis() - CAM_BIEN_LAST_CHECKED >= CAM_BIEN_INTERVAL)
-            && ((!IGNORE_STATUS) || (IGNORE_TIMES <= IGNORE_SERIOUS))) {
-     /* Màn hình chờ
-        Kiểm tra coi có từ chối 5 lần chưa, rồi thì hiện thông báo khẩn cấp và để đó, không hiện màn hình chờ */     
-     sysReadSensors();
-     scrShowStatus();
-     CAM_BIEN_LAST_CHECKED = millis();
+      CAM_BIEN_LAST_CHECKED = millis();
+      KIEM_TRA_CAY_XANH_LAST_CHECKED = CAM_BIEN_LAST_CHECKED;
+   } 
+   // Bỏ flag vì đang chẳng hiển thị cái gì
+   else { 
+      TFT_MESSAGE_AVAILABLE = false;
    }
-   else { TFT_MESSAGE_AVAILABLE = false; }
-}
 
-long long tmpMillisValue;
-void sysResetCounters() {
-   tmpMillisValue = millis();
-   CAM_BIEN_LAST_CHECKED = tmpMillisValue;
-   KIEM_TRA_CAY_XANH_LAST_CHECKED = tmpMillisValue;
+
+  // Các hàm loop vận hành, chỗ này KHÔNG nên động vào
+  // ----------------------------------------------------------------------------------------------------------------------------
+  // Play AUDIO (Schreibfaul1 loop for Play Audio (details here: https://github.com/schreibfaul1/ESP32-audioI2S))
+  audio_play.loop();  
+  vTaskDelay(1); 
+
+  // Loop các thành phần của sản phẩm (SENSORS, CARE, SCREEN)
+  // sysSensorsLoop();  // Dùng trong CAM_BIEN_LAST_CHECKED
+  scrLoop();
+  
+  if (millis() - CAREOBJ_LAST_CHECKED >= CAREOBJ_INTERVAL) {
+      sunLoop();
+      soilLoop();
+  }
 }
 
 // ------------------------------------------------------------------------------------------------------------------------------

@@ -1,8 +1,16 @@
 void scrInit() {
   SPI.begin(LCD_SCLK, -1, LCD_MOSI, LCD_CS);
   delay(100);
-  display.initR(INITR_144GREENTAB);
-  display.setRotation(0);
+  
+  // // ST7735
+  // display.initR(INITR_144GREENTAB);
+  // display.setRotation(0);
+
+  // For ST7789, use init(width, height)
+  display.init(240, 320);   // adjust resolution (240x240, 240x320, etc.)
+  display.setRotation(0);   // optional, set orientation
+  display.invertDisplay(false);   // or false
+  
   tft.begin(display);
 
   scrClear();
@@ -35,7 +43,7 @@ void scrLoop() {
     return;
 
   // ================== HIỂN THỊ PAGE ==================
-  display.fillRect(0, TFT_TEXT_START_Y, 128, 128, ST77XX_WHITE);
+  display.fillRect(0, TFT_TEXT_START_Y, SCREEN_W, SCREEN_H, ST77XX_WHITE);
 
   tft.setCursor(TFT_TEXT_START_X, TFT_TEXT_START_Y + LINE_HEIGHT);
   tft.print(TFT_PAGES[TFT_DISPLAY_PAGE]);
@@ -65,23 +73,21 @@ void scrClear() {
   display.fillScreen(ST77XX_WHITE); 
 }
 
-void scrDrawIcon(const uint8_t x, const uint8_t y, const uint8_t w, const uint8_t h, const uint8_t* icon, const uint16_t color) {
-  display.fillRect(0, 0, 128, 30, ST77XX_WHITE);
+void scrDrawIcon(const uint16_t x, const uint16_t y, const uint16_t w, const uint16_t h, const uint8_t* icon, const uint16_t color) {
+  display.fillRect(0, 0, SCREEN_W, 30, ST77XX_WHITE);
   display.drawXBitmap(x, y, icon, w, h, color);
 }
 
-void scrDrawMessageFixed(const uint8_t x, const uint8_t y, const char* msg)
+void scrDrawMessageFixed(const uint16_t x, const uint16_t y, const char* msg)
 { 
-  scrxSpeaking = false;
   scrxListening = false;
-  display.fillRect(0, y, 128, 128, ST77XX_WHITE);
+  display.fillRect(0, y, SCREEN_W, SCREEN_H, ST77XX_WHITE);
   tft.setCursor(x, y + LINE_HEIGHT);
   tft.print(msg);
 }
 
-void scrDrawMessage(const uint8_t x, const uint8_t y, const char* msg, int repeatTimes)
+void scrDrawMessage(const uint16_t x, const uint16_t y, const char* msg, int repeatTimes)
 {
-  scrxSpeaking = false;
   scrxListening = false;
   scrPrepareTftPages(msg, y);
 
@@ -98,37 +104,63 @@ void scrDrawMessage(const uint8_t x, const uint8_t y, const char* msg, int repea
 
 void scrShowStatus() {
   scrClear();
-  display.fillRect(64, 0, 1, 128, ST77XX_BLACK);
-  display.fillRect(0, 64, 128, 1, ST77XX_BLACK);
+  // display.fillRect(64, 0, 1, 128, ST77XX_BLACK);
+  // display.fillRect(0, 64, 128, 1, ST77XX_BLACK);
 
-  // Ánh sáng, nhiệt, ẩm, trạng thái
-  display.drawXBitmap(20, 8, epd_bitmap_icosLight0, 24, 24, ST77XX_YELLOW);
-  if (ssLightAo >= 3800) 
-  {
-    display.fillRect(0, 0, 63, 63, ST77XX_WHITE);
-    display.drawXBitmap(20, 8, epd_bitmap_icosLight1, 24, 24, ST77XX_BLACK);
-  }
+  // // Ánh sáng, nhiệt, ẩm, trạng thái
+  // display.drawXBitmap(20, 8, epd_bitmap_icosLight0, 24, 24, ST77XX_YELLOW);
+  // if (ssLightAo >= 3800) 
+  // {
+  //   display.fillRect(0, 0, 63, 63, ST77XX_WHITE);
+  //   display.drawXBitmap(20, 8, epd_bitmap_icosLight1, 24, 24, ST77XX_BLACK);
+  // }
 
-  display.drawXBitmap(84, 8, epd_bitmap_icosTemp, 24, 24, ST77XX_RED);
-  display.drawXBitmap(20, 72, epd_bitmap_icosHumid, 24, 24, ST77XX_BLUE);
+  // display.drawXBitmap(84, 8, epd_bitmap_icosTemp, 24, 24, ST77XX_RED);
+  // display.drawXBitmap(20, 72, epd_bitmap_icosHumid, 24, 24, ST77XX_BLUE);
   
-  display.drawXBitmap(84, 72, epd_bitmap_icoSmile, 24, 24, ST77XX_GREEN);
-  tft.setCursor(68, 116);
-  tft.print("Vui vẻ");
+  // display.drawXBitmap(84, 72, epd_bitmap_icoSmile, 24, 24, ST77XX_GREEN);
+  // tft.setCursor(68, 116);
+  // tft.print("Vui vẻ");
 
-  if (IGNORE_STATUS) 
-  { display.fillRect(65, 65, 128, 128, ST77XX_WHITE);
-    display.drawXBitmap(84, 72, epd_bitmap_icoSad, 24, 24, ST77XX_ORANGE);
-    tft.setCursor(68, 116);
-    tft.print("Giúp!");
-  }
+  // if (IGNORE_STATUS) 
+  // { display.fillRect(65, 65, 128, 128, ST77XX_WHITE);
+  //   display.drawXBitmap(84, 72, epd_bitmap_icoSad, 24, 24, ST77XX_ORANGE);
+  //   tft.setCursor(68, 116);
+  //   tft.print("Giúp!");
+  // }
 
-  tft.setCursor(4, 52);
-  tft.print(ssLightAo);
-  tft.setCursor(4, 116);
-  tft.print(ssHumidity);
-  tft.setCursor(68, 52);
-  tft.print(ssTemperature);
+  // tft.setCursor(4, 52);
+  // tft.print(curLightAo);
+  // tft.setCursor(4, 116);
+  // tft.print(curHumidity);
+  // tft.setCursor(68, 52);
+  // tft.print(curTemperature);
+
+  tft.setCursor(4, 20);
+  tft.println("Trạng thái cây xanh của bạn");
+  tft.print("Thời gian: ");
+  tft.println(sysGetDateTimeString());
+  tft.print("Ánh sáng (lux): ");
+  tft.println(curLightAo);
+  tft.print("Nhiệt độ: ");
+  tft.println(curTemperature);
+  tft.print("Độ ẩm (%RH): ");
+  tft.println(curHumidity);
+  tft.print("Đất ẩm? ");
+  tft.println(SOIL_VALUE ? "Khô" : "Ẩm"); // ẩm 0 khô 1
+  tft.print("Lần tưới gần nhất (m): ");
+  tft.println((float)(millis() - WATER_LAST_TM)/(60000.0f));
+  tft.print("Lần tưới gần nhất (h): ");
+  tft.println((float)(millis() - WATER_LAST_TM)/(3600000.0f));
+  tft.print("Thời gian phơi sáng (m): ");
+  tft.println( (float)SUN_TIME / 60000.0f  );
+  tft.print("Thời gian phơi sáng (h): ");
+  tft.println( (float)SUN_TIME / 3600000.0f );
+  tft.print("Trạng thái cây: ");
+  tft.print(IGNORE_STATUS ? "Giúp!" : "Vui vẻ, bình thường");
+  tft.print(" (");
+  tft.print(IGNORE_TIMES);
+  tft.println(" lần)");
 }
 
 void scrListening() {
