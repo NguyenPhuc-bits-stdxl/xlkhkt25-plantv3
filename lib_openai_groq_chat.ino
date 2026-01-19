@@ -219,7 +219,7 @@ String OpenAI_Groq_LLM( const char* llm_open_key, bool flg_WebSearch, const char
     }
 
     DebugPrintln( "\n---------------------------------------------------" );
-    DebugPrintln( "====> Total Response: \n" + LLM_Response + "\n====");   // ## uncomment to see complete server response */  
+    //DebugPrintln( "====> Total Response: \n" + LLM_Response + "\n====");   // ## uncomment to see complete server response */  
     DebugPrintln( "AI LLM server/model: [" + LLM_server + " / " + LLM_model + "]" );
     DebugPrintln( "-> Latency LLM AI Server (Re)CONNECT:          " + (String) ((float)((t_startRequest-t_start))/1000) );   
     DebugPrintln( "-> Latency LLM AI Response:                    " + (String) ((float)((t_response-t_startRequest))/1000) );   

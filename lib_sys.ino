@@ -41,7 +41,7 @@ void sysInit() {
   THRESH_TEMP_MAX  = prefs.getFloat("wmstTmax", 45.0f);
   THRESH_HUMID_MIN = prefs.getFloat("wmstHmin", 60.0f);
   THRESH_HUMID_MAX = prefs.getFloat("wmstHmax", 90.0f);
-  THRESH_LIGHT_MIN = prefs.getFloat("wmstLmin", 6000.0f); // 8klux - 20klux +- 2klux bù lệch cảm biến
+  THRESH_LIGHT_MIN = prefs.getFloat("wmstLmin", 800.0f); // 8klux - 20klux +- 2klux bù lệch cảm biến
   THRESH_LIGHT_MAX = prefs.getFloat("wmstLmax", 22000.0f);
 
   // Lấy giá trị chăm sóc (NA = default)
@@ -94,6 +94,8 @@ void sysReset() {
   scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoReplay, ST77XX_BLUE);
   scrDrawMessageFixed(MSG_START_X, MSG_START_Y, systrReset);
 
+  delay(500);
+
   wmConfig();
 }
 
@@ -131,12 +133,35 @@ String sysGetDateTimeString() {
   return String(buffer);
 }
 
+// Lấy string DateTime shortver
+String sysGetDateTimeStringShort() {
+  time_t now = time(nullptr);    
+  localtime_r(&now, &timeinfo); 
+
+  char buffer[128];
+  snprintf(
+    buffer,
+    sizeof(buffer),
+    "%02d/%02d/%04d %02d:%02d:%02d",
+    timeinfo.tm_mday,
+    timeinfo.tm_mon + 1,
+    timeinfo.tm_year + 1900,
+    timeinfo.tm_hour,
+    timeinfo.tm_min,
+    timeinfo.tm_sec
+  );
+
+  return String(buffer);
+}
+
 #pragma endregion Essentials
 
 #pragma region SetupPhase2
 
 // Hàm Setup Phase 2
 void sysSetupPhase2() {
+  scrSetupPhase2();
+
   Serial.println("SYS SP2");
   prefs.putString("sysStMem", DEFAULT_MEM);
 
@@ -150,6 +175,14 @@ void sysSetupPhase2() {
   Serial.println(ThreshFbkParse);
 
   prefs.putBool("wmstSetupDone", true); // set TRUE
+
+  int tickPos = ThreshFbk.indexOf("```");
+  if (tickPos < 0) tickPos = ThreshFbk.length();
+
+  emlStart();
+  emlBodyWelcome(ThreshFbk.substring(0, tickPos));
+  emlFinalize();
+
   Serial.println("SYS SP2 DONE. RESTARTING...");
   ESP.restart(); // restart để áp dụng hiệu lực
 }
@@ -166,17 +199,18 @@ bool sysParsePlantThres(String response) {
     String payload = response.substring(start, end);
     payload.trim();
 
-    float tmin, tmax, hmin, hmax, lmin, lmax;
+    float tmin, tmax, hmin, hmax, lmin, lmax, wcycle, sunhours;
 
     int count = sscanf(
         payload.c_str(),
-        "%f %f %f %f %f %f",
+        "%f %f %f %f %f %f %f %f",
         &tmin, &tmax,
         &hmin, &hmax,
-        &lmin, &lmax
+        &lmin, &lmax,
+        &wcycle, &sunhours
     );
 
-    if (count != 6) return false;
+    if (count != 8) return false;
 
     // Nhiệt độ: 5 – 45 °C
     tmin = max(5.0f,  min(tmin, 45.0f));
@@ -214,6 +248,9 @@ bool sysParsePlantThres(String response) {
     prefs.putFloat("wmstHmax", hmax);
     prefs.putFloat("wmstLmin", lmin);
     prefs.putFloat("wmstLmax", lmax);
+  
+    prefs.putInt("wmstWcycle", (int)wcycle);
+    prefs.putFloat("wmstLDuration", sunhours);
 
     return true;
 }
@@ -419,12 +456,12 @@ String prmSetupPhase2() {
   prompt += "và không thêm bất kỳ chữ, ký hiệu hay ngôn ngữ chú thích nào khác. ";
   prompt += "Bên trong code-block phải có đúng 8 số nguyên, viết trên cùng một dòng, cách nhau bằng dấu cách, theo thứ tự: ";
   prompt += "t_min t_max h_min h_max l_min l_max w_cycle sun_hours. ";
-  prompt += "Các giá trị lần lượt là: nhiệt độ tối thiểu và tối đa (°C), độ ẩm tối thiểu và tối đa (RH, %%), ";
-  prompt += "ánh sáng tối thiểu và tối đa (0–4095), chu kỳ tưới (ngày/lần), và số giờ phơi nắng lý tưởng mỗi ngày. ";
-  prompt += "Nếu thông tin về loài cây không rõ ràng, hãy sử dụng bộ mặc định sau để phán đoán: 10 40 60 90 0 3800 3 4. ";
+  prompt += "Các giá trị lần lượt là: nhiệt độ tối thiểu và tối đa an toàn (°C), độ ẩm tối thiểu và tối đa an toàn (RH, %%), ";
+  prompt += "ánh sáng tối thiểu và tối đa (lux), chu kỳ tưới (ngày/lần), và số giờ phơi nắng lý tưởng mỗi ngày. ";
+  prompt += "Nếu thông tin về loài cây không rõ ràng, hãy sử dụng bộ mặc định sau để phán đoán: 10 40 60 90 800 2200 3 4. ";
   prompt += "Sai số nhỏ được chấp nhận nếu không ảnh hưởng đáng kể đến thực tế, ví dụ giữa 32°C và 35°C, ";
   prompt += "nhưng sai số lớn như giữa 25°C và 40°C là không được phép. ";
-  prompt += "Bạn phải tuân thủ tuyệt đối định dạng này để hệ thống có thể đọc dữ liệu chính xác.";
+  prompt += "Bạn phải tuân thủ tuyệt đối định dạng này để hệ thống có thể đọc dữ liệu chính xác. Không chèn các liên kết web, danh sách liệt kê.";
 
   return prompt;
 }
@@ -500,6 +537,7 @@ String prmCare() {
 
 // chạy ở #sysInit
 void sunInit() {
+  SUN_TIME = 0;
   SUN_LAST_CHECKED = millis();
 }
 
@@ -515,7 +553,7 @@ bool sunLoop() {
   }
 
   unsigned long currentTime = millis();
-  float deltaTime = (currentTime - SUN_LAST_CHECKED) / 1000.0;
+  float deltaTime = (currentTime - SUN_LAST_CHECKED);
   SUN_LAST_CHECKED = currentTime;
 
   if (curLightAo > SUN_THRESHOLD) SUN_TIME += deltaTime;
@@ -584,3 +622,34 @@ bool soilLoop() {
   return true;
 }
 #pragma endregion CareObjSoil
+
+String getMailStateString() {
+  String msg;
+  msg +=   "- Thời gian: " + sysGetDateTimeString();
+  msg += "<br>- Địa điểm: " + String(WEB_SEARCH_USER_CITY);
+  msg += "<br>- Ánh sáng: " + String(curLightAo, 2) + " lux";
+  msg += "<br>- Nhiệt độ: " + String(curTemperature, 2) + " °C";
+  msg += "<br>- Độ ẩm (%RH): " + String(curHumidity, 2) + " %";
+  msg += "<br>- Trạng thái: ";
+    msg += (IGNORE_STATUS ? "Cần trợ giúp (" : "Vui vẻ (");
+    msg += String(IGNORE_TIMES) + " lần)";
+  msg += "<br>- Trạng thái đất: ";
+    msg += (SOIL_VALUE ? "Khô" : "Ẩm");
+  msg += "<br>- Lần tưới cây gần nhất: ";
+    msg += String((float)(millis() - WATER_LAST_TM)/(3600000.0f), 4) + " giờ trước";
+  msg += "<br>- Thời gian phơi sáng hôm nay: ";
+    msg += String((float)SUN_TIME / 3600000.0f, 4) + " giờ";
+  msg += "<br>Mục tiêu chăm sóc:";
+  msg += "<br>- Ánh sáng (lux): từ ";
+    msg += String(THRESH_LIGHT_MIN, 1) + " đến " + String(THRESH_LIGHT_MAX, 1);
+  msg += "<br>- Nhiệt độ (độ C): từ ";
+    msg += String(THRESH_TEMP_MIN, 1) + " đến " + String(THRESH_TEMP_MAX, 1);
+  msg += "<br>- Độ ẩm: từ ";
+    msg += String(THRESH_HUMID_MIN, 1) + " đến " + String(THRESH_HUMID_MAX, 1);
+  msg += "<br>- Chu kỳ tưới cây: ";
+    msg += String(WATER_CYCLE) + " ngày/lần";
+  msg += "<br>- Mỗi ngày cần ";
+    msg += String(SUN_TARGET) + " giờ nắng";
+
+  return msg;
+}

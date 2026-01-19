@@ -102,8 +102,10 @@ void scrDrawMessage(const uint16_t x, const uint16_t y, const char* msg, int rep
   // ... loop will handle
 }
 
-void scrShowStatus() {
-  scrClear();
+// FOR ST7735 SCREEN
+
+// void scrShowStatus() {
+//   scrClear();
   // display.fillRect(64, 0, 1, 128, ST77XX_BLACK);
   // display.fillRect(0, 64, 128, 1, ST77XX_BLACK);
 
@@ -135,32 +137,76 @@ void scrShowStatus() {
   // tft.print(curHumidity);
   // tft.setCursor(68, 52);
   // tft.print(curTemperature);
+// }
 
-  tft.setCursor(4, 20);
-  tft.println("Trạng thái cây xanh của bạn");
-  tft.print("Thời gian: ");
-  tft.println(sysGetDateTimeString());
+void scrShowStatus() {
+  scrClear();
+  tft.setCursor(46, 16);
+  tft.println(sysGetDateTimeStringShort());
+  if (curLightAo < SUN_THRESHOLD) {
+    display.drawXBitmap(2, 20, epd_bitmap_icosLight1, ICO_ACT_DIMM, ICO_ACT_DIMM, ST77XX_BLACK); // dark
+  } else {
+  display.drawXBitmap(2, 20, epd_bitmap_icosLight0, ICO_ACT_DIMM, ICO_ACT_DIMM, ST77XX_YELLOW); // bright
+  }
+
+  tft.setCursor(28, 44);
   tft.print("Ánh sáng (lux): ");
-  tft.println(curLightAo);
+  tft.print(curLightAo);
+
+  display.drawXBitmap(2, 48, epd_bitmap_icosTemp, ICO_ACT_DIMM, ICO_ACT_DIMM, ST77XX_RED);
+  tft.setCursor(28, 72);
   tft.print("Nhiệt độ: ");
   tft.println(curTemperature);
+
+  display.drawXBitmap(2, 76, epd_bitmap_icosHumid, ICO_ACT_DIMM, ICO_ACT_DIMM, ST77XX_BLUE);
+  tft.setCursor(28, 100);
   tft.print("Độ ẩm (%RH): ");
   tft.println(curHumidity);
-  tft.print("Đất ẩm? ");
-  tft.println(SOIL_VALUE ? "Khô" : "Ẩm"); // ẩm 0 khô 1
-  tft.print("Lần tưới gần nhất (m): ");
-  tft.println((float)(millis() - WATER_LAST_TM)/(60000.0f));
-  tft.print("Lần tưới gần nhất (h): ");
-  tft.println((float)(millis() - WATER_LAST_TM)/(3600000.0f));
-  tft.print("Thời gian phơi sáng (m): ");
-  tft.println( (float)SUN_TIME / 60000.0f  );
-  tft.print("Thời gian phơi sáng (h): ");
-  tft.println( (float)SUN_TIME / 3600000.0f );
-  tft.print("Trạng thái cây: ");
-  tft.print(IGNORE_STATUS ? "Giúp!" : "Vui vẻ, bình thường");
+
+  if (!IGNORE_STATUS) {
+    display.drawXBitmap(2, 104, epd_bitmap_icoSmile, ICO_ACT_DIMM, ICO_ACT_DIMM, ST77XX_GREEN);
+  } else {
+    display.drawXBitmap(2, 104, epd_bitmap_icoSad, ICO_ACT_DIMM, ICO_ACT_DIMM, ST77XX_RED);
+  }
+  tft.setCursor(28, 128);
+  tft.print("Trạng thái: ");
+  tft.print(IGNORE_STATUS ? "Giúp" : "Vui vẻ");
   tft.print(" (");
   tft.print(IGNORE_TIMES);
-  tft.println(" lần)");
+  tft.println(")");
+  
+  tft.setCursor(28, 156);
+  tft.print("Đất có đang ẩm không? ");
+  tft.println(SOIL_VALUE ? "Không" : "Có"); // ẩm 0 khô 1
+  
+  tft.setCursor(28, 184);
+  tft.print("Tưới (m;h): ");
+  tft.print((float)(millis() - WATER_LAST_TM)/(60000.0f));
+  tft.print(";");
+  tft.println((float)(millis() - WATER_LAST_TM)/(3600000.0f));
+  
+  tft.setCursor(28, 212);
+  tft.print("Sáng (m;h): ");
+  tft.print((float)SUN_TIME / 60000.0f);
+  tft.print(";");
+  tft.println((float)SUN_TIME / 3600000.0f);
+
+  tft.setCursor(2, 240);
+  tft.println("\n--- MỤC TIÊU CHĂM SÓC ---");
+  tft.print("Phơi nắng ");
+  tft.print(SUN_TARGET);
+  tft.println("h/ngày");
+  tft.print("Tưới cây ");
+  tft.print(WATER_CYCLE);
+  tft.println(" ngày/lần");
+}
+
+void scrMail() {
+  scrClear();
+  scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoMail, ST77XX_GREEN);  
+  display.fillRect(0, 28, 128, 128, ST77XX_WHITE);
+  tft.setCursor(MSG_START_X, MSG_START_Y + LINE_HEIGHT);
+  tft.print("Đang gửi thư...");
 }
 
 void scrListening() {
@@ -173,10 +219,18 @@ void scrListening() {
   tft.print("Đang nghe...");
 }
 
+void scrSetupPhase2() {
+  scrClear();
+  scrDrawIcon(ICO_START_X, ICO_START_Y, ICO_ACT_DIMM, ICO_ACT_DIMM, epd_bitmap_icoWait, ST77XX_RED);  
+  display.fillRect(0, 28, 128, 128, ST77XX_WHITE);
+  tft.setCursor(MSG_START_X, MSG_START_Y + LINE_HEIGHT);
+  tft.print("Đang tiếp tục cấu\nhình hệ thống.\nChờ thêm tí xíu nữa\nnhé...");
+}
+
 void scrStartUp() {   
   scrClear();
-  display.drawXBitmap(0, 32, epd_bitmap_lgNovaEsp, 128, 48, ST77XX_GREEN);
+  display.drawXBitmap(56, 16, epd_bitmap_lgNovaEsp, 128, 48, ST77XX_GREEN);
  
-  tft.setCursor(20, 96);
+  tft.setCursor(54, 96);
   tft.print("Đang tải...");
 }

@@ -110,14 +110,14 @@ bool scrxListening = false;
 
 #pragma region Strings
 
-const char* systrReset = "Đặt lại\ncấu hình.";
+const char* systrReset = "Đang khởi tạo cấu\nhình lại hệ thống...";
 
 const char* wmBroadcast = "NOVA";
-const char* wmsPleaseConfig = "Kết nối\n[NOVA] và\ntruy cập\n192.168.4.1.";
-const char* wmsSaveRequest = "Đang nhận...";
-const char* wmsSaveSuccess = "Thiết lập\nthành công\nChờ...";
+const char* wmsPleaseConfig = "Mở cài đặt mạng\nvà kết nối [NOVA].\nSau đó, truy cập\nhttp://192.168.4.1\nđể cấu hình.";
+const char* wmsSaveRequest = "Đang lưu dữ liệu...";
+const char* wmsSaveSuccess = "Thiết lập hoàn tất\nVui lòng chờ...";
 const char* wmsReading = "Đang đọc\ncấu hình...";
-const char* wmsEstablished = "Kết nối\nthành công!";
+const char* wmsEstablished = "Đã kết nối internet\nthành công!";
 
 #pragma endregion Strings
 
@@ -209,8 +209,6 @@ void sysFetchCreds();
 
 void emlInit();
 void emlStart();
-void emlBodyUncomfortable(String smsg, int slight, float stemp, float shumid, int signore, String swhere, String stime);
-void emlBodyConversation(String slog, String swhere, String stime);
 void emlFinalize();
 
 #pragma endregion Prototypes
@@ -279,8 +277,8 @@ float THRESH_TEMP_MIN  = 10.0f;
 float THRESH_TEMP_MAX  = 40.0f;
 float THRESH_HUMID_MIN = 60.0f;
 float THRESH_HUMID_MAX = 90.0f;
-float THRESH_LIGHT_MIN = 0.0f;
-float THRESH_LIGHT_MAX = 3800.0f;
+float THRESH_LIGHT_MIN = 800.0f;
+float THRESH_LIGHT_MAX = 22000.0f;
 
 #pragma endregion Plant info
 
@@ -362,9 +360,7 @@ const char* LLM_SYSTEM_PROMPT = "Bạn là Nova, một cây xanh nhỏ nhắn, t
 " [MEM] là trí nhớ của bạn tại thời điểm đó, bạn phải ghi đúng định dạng và độ dài yêu cầu."
 
 " [SYS] Bắt buộc sau khi trả lời người dùng xong, bạn phải đính kèm một đoạn trí nhớ từ 20 đến 100 từ đặt sau chỉ thị [MEM],"
-" trong cùng câu trả lời ấy. Phần này có tác dụng tổng hợp lại những gì đã biết về người dùng, không bịa thêm,"
-" ghi lại nét tính cách, sở thích, cảm xúc hoặc đặc điểm hội thoại của người dùng để hệ thống điện tử lưu lại."
-" Đây là định dạng bắt buộc và bạn phải ghi đúng.";
+" trong cùng câu trả lời ấy.";
 
 // Defines for roles
 #define RSTR_ASSISTANT "assistant"
@@ -396,6 +392,7 @@ void setup()
   Serial.println("SYS Components e.g. Screen + Prefs + WiFi + sensors");
 
   Serial.println("=== DBG PLANT INFO ===");
+
   Serial.println(PLANT_NAME);
   Serial.println(YOU_CALL);
   Serial.println(YOU_NAME);
@@ -407,6 +404,9 @@ void setup()
   Serial.println(THRESH_HUMID_MAX);
   Serial.println(THRESH_LIGHT_MIN);
   Serial.println(THRESH_LIGHT_MAX);
+  Serial.println(WATER_CYCLE);
+  Serial.println(SUN_TARGET);
+
   Serial.println("=== DBG END DIAG ===");
 
    // Nếu chưa biết thông tin về cây (FALSE) --> CALL AI lấy thông tin
@@ -548,13 +548,12 @@ void loop()
   {  Serial.println( "< SENDING CHAT HISTORY. WAIT... >" );
      sysSensorsRead();
      emlStart();
-     emlBodyConversation(MESSAGES, ssLightAo, ssTemperature, ssHumidity, IGNORE_TIMES, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str());
+     emlBodyConversation(MESSAGES);
      emlFinalize();
 
      UserRequest = ""; // hủy command, vì cái này chỉ có nhiệm vụ gửi mail
   } 
   
-  // TODO: chèn postfix @dev và [SYS] nếu thấy khó chịu
   // ------ USER REQUEST found -> Call OpenAI_Groq_LLM() ------------------------------------------------------------------------
 
   if (UserRequest != "" ) 
@@ -678,12 +677,13 @@ void loop()
         // Lùi âm lượng 1 nấc vì VOL được bấm trước
         volume_level = (volume_level - 1 + steps) % steps;
         audio_play.setVolume(gl_VOL_STEPS[volume_level]);
-
+        
         Serial.println("Sending Email");
+        scrMail();
         delay(1000); //debounce
 
         emlStart();
-        emlBodyConversation(MESSAGES, ssLightAo, ssTemperature, ssHumidity, IGNORE_TIMES, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str());
+        emlBodyConversation(MESSAGES);
         emlFinalize();
 
         flg_email_sent = true;
@@ -702,7 +702,6 @@ void loop()
     }
   }
 
-   // TODO: Thêm màn hình "Đang gửi thư..."
    if (flg_RECORD_BTN == LOW) {
       // Hiển thị "Đang nghe...""
       scrListening(); 
@@ -761,7 +760,7 @@ void loop()
 
          // Send Email
          emlStart();
-         emlBodyUncomfortable(LLM_Feedback, ssLightAo, ssTemperature, ssHumidity, IGNORE_TIMES, WEB_SEARCH_USER_CITY, sysGetDateTimeString().c_str());
+         emlBodyUncomfortable(LLM_Feedback);
          emlFinalize();
       }
       
@@ -788,6 +787,7 @@ void loop()
   if (millis() - CAREOBJ_LAST_CHECKED >= CAREOBJ_INTERVAL) {
       sunLoop();
       soilLoop();
+      CAREOBJ_LAST_CHECKED = millis();
   }
 }
 

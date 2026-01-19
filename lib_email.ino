@@ -47,8 +47,33 @@ void emlStart()
     bodyHtml += "</div>";
 }
 
+void emlBodyWelcome(String msg) {
+    bodyText += "Chào bạn, mình là Nova!";
+
+    bodyHtml += "<div style=\"max-width:600px;margin:0 auto;padding:0 20px;color:#333;\">";
+    bodyHtml += "<h2 style=\"text-align:center;font-size:22px;margin-bottom:8px;\">";
+    bodyHtml += "Chào bạn, mình là Nova</h2>";
+
+    // Dòng mô tả nhỏ
+    bodyHtml += "<p style=\"text-align:center;font-size:14px;color:#666;margin-top:0;\">";
+    bodyHtml += "Xin chúc mừng, bạn vừa cấu hình thành công cây xanh yêu dấu của mình.\n";
+    bodyHtml += "<br>Hãy cùng nhau xây dựng thói quen chăm sóc cây xanh nào!.";
+    bodyHtml += "</p>";
+    
+    // Hướng dẫn chăm sóc
+    bodyHtml += "<p><b>Hướng dẫn chăm sóc:</b><br><span style=\"color:#d35400;font-style:italic;\">\"" + msg + "\"</span></p>";
+
+    // Thông tin chi tiết
+    bodyHtml += "<p><b>Thông tin chi tiết:</b></p>";
+    bodyHtml += "<p>";
+    bodyHtml += getMailStateString();
+    bodyHtml += "</p>";
+    
+    bodyHtml += "</div>";
+}
+
 // Hàm báo không thoải mái
-void emlBodyUncomfortable(String smsg, int slight, float stemp, float shumid, int signore, String swhere, String stime)
+void emlBodyUncomfortable(String smsg)
 {
     // Fallback text
     bodyText += "Bạn ơi, tớ đang cảm thấy khó chịu!\n";
@@ -59,28 +84,20 @@ void emlBodyUncomfortable(String smsg, int slight, float stemp, float shumid, in
     bodyHtml += "<h2 style=\"text-align:center;font-size:22px;margin-bottom:20px;\">Bạn ơi, tớ đang cảm thấy khó chịu!</h2>";
     bodyHtml += "<p>Thư này được gửi đến bạn bởi hệ thống điện tử của <b>cây xanh Nova</b>, cây xanh hiện đang cảm thấy không ổn và cần nhờ đến sự trợ giúp của bạn.</p>";
     bodyHtml += "<p><b>Lời nhắn từ cây xanh:</b><br><span style=\"color:#d35400;font-style:italic;\">\"" + smsg + "\"</span></p>";
-    
+
     bodyHtml += "<p><b>Thông tin chi tiết:</b></p>";
-    bodyHtml += "<ul style=\"list-style:none;padding-left:0;line-height:1.8;\">";
-    bodyHtml += "<li>- <b>Thời gian:</b> " + stime + "</li>";
-    bodyHtml += "<li>- <b>Địa điểm:</b> " + swhere + "</li>";
-    bodyHtml += "<li>- <b>Chỉ số cảm biến ánh sáng (từ 0-4095):</b> " + String(slight) + "</li>";
-    bodyHtml += "<li>- <b>Nhiệt độ:</b> " + String(stemp, 1) + " °C</li>";
-    bodyHtml += "<li>- <b>Độ ẩm:</b> " + String(shumid, 1) + " %</li>";
-    bodyHtml += "<li>- <b>Đã yêu cầu trợ giúp:</b> " + String(signore) + " lần liên tiếp kể từ thời điểm tương tác gần nhất.</li>";
-    bodyHtml += "</ul></div>";
+    bodyHtml += "<p>";
+    bodyHtml += getMailStateString();
+    bodyHtml += "</p>";
+    bodyHtml += "</div>";
 }
 
 // Hàm gửi lịch sử trò chuyện
-void emlBodyConversation(String slog, int slight, float stemp, float shumid, int signore, String swhere, String stime) {
+void emlBodyConversation(String slog) {
     bodyText += "LỊCH SỬ TRÒ CHUYỆN\n";
     bodyText += "Thư này được gửi đến bạn bởi hệ thống điện tử của cây xanh Nova.\n";
     bodyText += "Dưới đây là lịch sử trò chuyện giữa bạn và Nova.\n\n";
     bodyText += slog + "\n\n";
-    bodyText += "Thông tin chi tiết:\n";
-    bodyText += "- Thời gian: " + stime + "\n";
-    bodyText += "- Địa điểm: " + swhere + "\n";
-
 
     bodyHtml += "<div style=\"max-width:600px;margin:0 auto;padding:0 20px;color:#333;\">";
     bodyHtml += "<h2 style=\"text-align:center;font-size:22px;margin-bottom:8px;\">";
@@ -102,15 +119,10 @@ void emlBodyConversation(String slog, int slight, float stemp, float shumid, int
     bodyHtml += "</div>";
 
     // Thông tin chi tiết
-    bodyHtml += "<h3 style=\"margin-top:30px;\">Thông tin chi tiết</h3>";
-    bodyHtml += "<ul style=\"list-style:none;padding-left:0;line-height:1.8;\">";
-    bodyHtml += "<li>- <b>Thời gian:</b> " + stime + "</li>";
-    bodyHtml += "<li>- <b>Địa điểm:</b> " + swhere + "</li>";
-    bodyHtml += "<li>- <b>Chỉ số cảm biến ánh sáng (từ 0-4095):</b> " + String(slight) + "</li>";
-    bodyHtml += "<li>- <b>Nhiệt độ:</b> " + String(stemp, 1) + " °C</li>";
-    bodyHtml += "<li>- <b>Độ ẩm:</b> " + String(shumid, 1) + " %</li>";
-    bodyHtml += "<li>- <b>Đã yêu cầu trợ giúp:</b> " + String(signore) + " lần liên tiếp kể từ thời điểm tương tác gần nhất.</li>";
-    bodyHtml += "</ul>";
+    bodyHtml += "<p><b>Thông tin chi tiết:</b></p>";
+    bodyHtml += "<p>";
+    bodyHtml += getMailStateString();
+    bodyHtml += "</p>";
 
     bodyHtml += "</div>";
 }
@@ -132,12 +144,6 @@ void emlFinalize() {
     msg.text.body(bodyText);
     msg.html.body(bodyHtml);
     
-    // Lấy timestamp
-    // Serial.println("GET timestamp via NTP Pool");
-    // configTime(7 * 3600, 0, "pool.ntp.org");
-    // msg.timestamp = time(nullptr);
-    // Serial.println("GET timestamp done!");
-
     // Check định dạng email người nhận
     if (RECIPIENT_EMAIL == "") {
         Serial.println("RM Email can't be null, task cancelled.");
