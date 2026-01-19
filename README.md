@@ -1,5 +1,6 @@
 # Giới thiệu
 Chậu cây thông minh phiên bản 3 (Sản phẩm dự thi giai đoạn tái cấu trúc lần thứ 2)
+A Smart plant project.
 
 ## Flash configuration
 **Board: "ESP32S3 Dev Module"**
@@ -42,10 +43,14 @@ Zigbee Mode: "Disabled"
 - SD card functionality removed
 - Prompts reconfigured to Vietnamese
 - Supported reading sensors (DHT + LDR)
-- Display added (ST7735 + U8g2 for AdaGFX)
+- Display added (ST7735 + U8g2 for AdaGFX) (was later changed to ST7789)
 - Reset buton is introduced
 - Added functionality to configure WiFi by sending RESET command at startup
 - Added the ability to sense uncomfortable conditions and ask for help if needed
+- Added the ability to track sun exposure time, watering event...
+- Added custom configurations in Setup.
+- Added the ability to fetch plant info (SETUP PHASE 2)
+- Added the ability to send email 
 
 # Dependencies
 ## Via Boards Manager
