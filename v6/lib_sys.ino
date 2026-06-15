@@ -187,6 +187,7 @@ bool sysIsOkay() {
 
 #pragma endregion Syscomf
 
+
 // For debug purposes only: In giá trị cảm biến ra SM
 void dbgSensors() {
   
@@ -219,4 +220,3 @@ void dbgSensors() {
   Serial.print(sysConvertMillisToTimeString(sunMillis, 1));
   Serial.println();
 }
-

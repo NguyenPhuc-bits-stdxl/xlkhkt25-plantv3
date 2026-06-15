@@ -1,9 +1,9 @@
-#define RECORD_PSRAM      false   
-#define RECORD_SDCARD     true
+#define RECORD_PSRAM      true   
+#define RECORD_SDCARD     false
 #define AUDIO_FILE        "/record.wav"   // mandatory if RECORD_SDCARD is true: filename for the AUDIO recording                                                
-#define SAMPLE_RATE       16000 
-#define BITS_PER_SAMPLE   16   
-#define GAIN_BOOSTER_I2S  6    
+#define SAMPLE_RATE       16000
+#define BITS_PER_SAMPLE   16
+#define GAIN_BOOSTER_I2S  1
 
 uint8_t* PSRAM_BUFFER;            // global array for RECORDED .wav (50% of PSRAM via ps_malloc() in I2S_Recording_Init()
                                   // (using 50% only to allow other functions using PSRAM too, e.g. AUDIO.H openai_speech() 
@@ -52,11 +52,6 @@ struct WAV_HEADER
 } myWAV_Header;
 
 
-bool flg_is_recording = false;         // only internally used
-
-bool flg_I2S_initialized = false;      // to avoid any runtime errors in case user forgot to initialize
- 
-
 
 bool I2S_Recording_Init() 
 {  
@@ -72,6 +67,7 @@ bool I2S_Recording_Init()
   i2s_channel_enable(rx_handle);                    // Before reading data, start the RX channel first
    
   Serial.println( "> I2S_Recording_Init - Initializing Recording Setup:"     );
+  delay(1000);
 
   if (RECORD_PSRAM)
   { // check if PSRAM exists -> if yes .. ACTION: allocating 50% of available PSRAM for recording buffer
@@ -99,6 +95,7 @@ bool I2S_Recording_Init()
     // changed v4 11/06: we do nothing here because lib_sd already init'ed it!  
   }  
   
+  Serial.println("I2S recording init success!");
   flg_I2S_initialized = true;                       // all is initialized, checked in procedure Recording_Loop() 
   return flg_I2S_initialized;  
 }
@@ -158,7 +155,7 @@ bool Recording_Loop()
     size_t values_recorded = bytes_read / 2;   // 1024 (also if 8bit, because I2S 'waste' 16 bit always, see below)
     
     // Optionally: Boostering the very low I2S Microphone INMP44 amplitude (multiplying values with factor GAIN_BOOSTER_I2S)  
-    if ( GAIN_BOOSTER_I2S > 1 && GAIN_BOOSTER_I2S <= 64 );    // check your own best values, recommended range: 1-64
+    if ( GAIN_BOOSTER_I2S > 1 && GAIN_BOOSTER_I2S <= 64 )    // check your own best values, recommended range: 1-64
     for (int16_t i = 0; i < values_recorded; ++i)             // all 1024 values, 16bit (bytes_read/2) 
     {   audio_buffer[i] = audio_buffer[i] * GAIN_BOOSTER_I2S;  
     }
@@ -243,6 +240,26 @@ bool Recording_Stop( String* audio_filename, uint8_t** buff_start, long* audiole
 
        Serial.println("> ... Done. Audio Recording into PSRAM finished.");
        Serial.println("> Bytes recorded: " + (String) *audiolength_bytes + ", audio length [sec]: " + (String) *audiolength_sec );
+
+       delay(500);
+       audio_play.stopSong(); // just to be sure
+
+       // Optional for debugging: Writing the PSRAM content to a 2nd file "AudioPSRAM.wav", printing first chunks
+       sdfoolproofTest();
+
+       File control_file = SD.open("/recps.wav", FILE_WRITE);
+       if (!control_file) {
+        Serial.println("Something was very wrong in the creation of PSRAM aud!");
+       }
+       control_file.write( PSRAM_BUFFER, PSRAM_BUFFER_counter );
+       control_file.close(); 
+
+       Serial.println( "\n# DEBUG: PSRAM content mirrored on SD card [AudioPSRAM.wav]" );
+       Serial.println(   "# DEBUG: PSRAM extract [220 bytes, 44 byte wav header in first 2 rows]:\n ");
+       for (int i=0; i<220; i++) 
+       { Serial.print( PSRAM_BUFFER[i], HEX); Serial.print( "\t"); 
+         if ( (i+1)%22 == 0) {Serial.println();}
+       } Serial.println();
     }    
     if (RECORD_SDCARD)
     {  
